@@ -30,21 +30,21 @@ const MetaMaskComponent = () => {
     const [newTokenAddress, setNewTokenAddress] = useState('');
     const [tokenData, setTokenData] = useState({});
 
-    useEffect(() => {
-        const savedWalletAddress = localStorage.getItem('address');
-        const savedBalance = localStorage.getItem('balance');
-        const savedTransactionHash = localStorage.getItem('transactionHash');
+    // useEffect(() => {
+    //     const savedWalletAddress = localStorage.getItem('address');
+    //     const savedBalance = localStorage.getItem('balance');
+    //     const savedTransactionHash = localStorage.getItem('transactionHash');
 
-        if (savedWalletAddress) setWalletAddress(savedWalletAddress);
-        if (savedBalance) setBalance(savedBalance);
-        if (savedTransactionHash) setTransactionHash(savedTransactionHash);
-    }, []);
+    //     if (savedWalletAddress) setWalletAddress(savedWalletAddress);
+    //     if (savedBalance) setBalance(savedBalance);
+    //     if (savedTransactionHash) setTransactionHash(savedTransactionHash);
+    // }, []);
 
-    useEffect(() => {
-        localStorage.setItem('walletAddress', walletAddress);
-        localStorage.setItem('balance', balance);
-        localStorage.setItem('transactionHash', transactionHash);
-    }, []);
+    // useEffect(() => {
+    //     localStorage.setItem('walletAddress', walletAddress);
+    //     localStorage.setItem('balance', balance);
+    //     localStorage.setItem('transactionHash', transactionHash);
+    // }, []);
 
     const showNotification = (title, message, type) => {
         Store.addNotification({
@@ -63,11 +63,13 @@ const MetaMaskComponent = () => {
     };
     // token addition to watchlist, getting their balances:
 
-    const fetchTokenData = async () => {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-
+    const fetchTokenData = async (watchlist) => {
+        // const provider = new ethers.BrowserProvider(window.ethereum);
+        const provider = new ethers.getDefaultProvider('mainnet');
         try {
             const data = {};
+            console.log(watchlist);
+            
             for (const address of watchlist) {
                 const tokenContract = new ethers.Contract(address, TOKEN_ABI, provider);
                 const [name, symbol, decimals] = await Promise.all([
@@ -75,6 +77,8 @@ const MetaMaskComponent = () => {
                     tokenContract.symbol(),
                     tokenContract.decimals()
                 ]);
+
+                
 
                 const balance = await tokenContract.balanceOf(walletAddress);
 
@@ -85,21 +89,24 @@ const MetaMaskComponent = () => {
                     balance: ethers.formatUnits(balance, decimals)
                 };
             }
+            console.log("inside fetchtokendata");
+            
+            console.log(data);
+            
             setTokenData(data);
         } catch (error) {
             console.error('Error:', error);
         }
     };
 
-    if (watchlist.length > 0) {
-        fetchTokenData();
-    }
+   
     const addTokenToWatchlist = () => {
         if (ethers.isAddress(newTokenAddress)) {
+            let newWatchlist = watchlist;
+            newWatchlist = [...newWatchlist, newTokenAddress];
             setWatchlist([...watchlist, newTokenAddress]);
             setNewTokenAddress('');
-        } else {
-            showNotification("Error", 'Invalid contract address.', 'danger');
+            fetchTokenData(newWatchlist, provider);
         }
     };
 
@@ -107,6 +114,7 @@ const MetaMaskComponent = () => {
         setWatchlist(watchlist.filter(item => item !== address));
     };
 // endhere
+
     const getTransactionHistory = async (address) => {
         if (address) {
             const url = `${baseUrl}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${apiKey}`;
@@ -412,11 +420,13 @@ const MetaMaskComponent = () => {
                     ) : (
                         <p style={{ textAlign: 'center' }}>Loading data for {address}...</p>
                     )}
-                    {<TokenHistory walletAddress={walletAddress} contractAddress={address} />}
+                  {walletAddress && <TokenHistory walletAddress={walletAddress} contractAddress={address} />}
+
                 </li>
             ))}
         </ul>
     </div>
+    
 </div>
 
     );
