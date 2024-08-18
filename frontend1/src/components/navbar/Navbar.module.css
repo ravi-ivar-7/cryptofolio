@@ -1,0 +1,22 @@
+.container{
+    background-color: rgb(20, 16, 34);
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    font-size: 1.5rem;
+    padding: 1rem;
+}
+.container span:nth-child(2){
+    display: flex;
+    gap: 2rem;
+}
+
+@media screen and (max-width: 768px) {
+    .container span:nth-child(2){
+        display: none;
+    }
+    .container{
+        font-size: 1rem;
+        justify-content:space-between;
+    }
+}
