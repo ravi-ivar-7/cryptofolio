@@ -4,6 +4,7 @@ import { Store } from 'react-notifications-component';
 import 'react-notifications-component/dist/theme.css';
 import 'animate.css';
 import TokenHistory from '../services/tokenHistory.js';
+import PriceChart from '../components/chart.js'
 
 const apiKey = 'KBSTDXJY5Q7X1A9Q9YGIFR4NNHNSR8GQJE';
 const baseUrl = 'https://api-sepolia.etherscan.io/api';
@@ -30,6 +31,11 @@ const MetaMaskComponent = () => {
     const [newTokenAddress, setNewTokenAddress] = useState('');
     const [tokenData, setTokenData] = useState({});
 
+    const [recipient, setRecipient] = useState('');
+    const [amount, setAmount] = useState('')
+    const [status, setStatus] = useState('')
+    const [marketPriceHistory, setMarketPriceHistory] = useState(null);
+    const [balanceChartValues, setBalanceChartValues] = useState(null);
     // useEffect(() => {
     //     const savedWalletAddress = localStorage.getItem('address');
     //     const savedBalance = localStorage.getItem('balance');
@@ -69,7 +75,7 @@ const MetaMaskComponent = () => {
         try {
             const data = {};
             console.log(watchlist);
-            
+
             for (const address of watchlist) {
                 const tokenContract = new ethers.Contract(address, TOKEN_ABI, provider);
                 const [name, symbol, decimals] = await Promise.all([
@@ -78,7 +84,7 @@ const MetaMaskComponent = () => {
                     tokenContract.decimals()
                 ]);
 
-                
+
 
                 const balance = await tokenContract.balanceOf(walletAddress);
 
@@ -90,16 +96,16 @@ const MetaMaskComponent = () => {
                 };
             }
             console.log("inside fetchtokendata");
-            
+
             console.log(data);
-            
+
             setTokenData(data);
         } catch (error) {
             console.error('Error:', error);
         }
     };
 
-   
+
     const addTokenToWatchlist = () => {
         if (ethers.isAddress(newTokenAddress)) {
             let newWatchlist = watchlist;
@@ -113,7 +119,7 @@ const MetaMaskComponent = () => {
     const removeTokenFromWatchlist = (address) => {
         setWatchlist(watchlist.filter(item => item !== address));
     };
-// endhere
+    // endhere
 
     const getTransactionHistory = async (address) => {
         if (address) {
@@ -133,35 +139,42 @@ const MetaMaskComponent = () => {
 
     };
 
+
     const getInitialBalance = async (address, blockNumber, provider) => {
         const balance = await provider.getBalance(address, ethers.toBigInt(blockNumber));
-        console.log(balance, 'getIntialBalace')
+        console.log(balance, 'getInitialBalance');
         return ethers.formatEther(balance);
     };
 
     const calculateHistoricalBalance = async (address, transactions, provider) => {
-        console.log(address, 'address', transactions)
+        console.log(address, 'address', transactions);
         const initialBalance = await getInitialBalance(address, transactions[0].blockNumber, provider);
         let balance = ethers.parseEther(initialBalance);
 
         const balanceHistory = [{ timestamp: transactions[0].timeStamp, balance: initialBalance }];
 
-        transactions.forEach((tx) => {
-            if (tx.blockNumber === transactions[0].blockNumber) {
-                return;
-            }
+        for (let i = 1; i < transactions.length; i++) {
+            const tx = transactions[i];
             const value = ethers.parseEther(ethers.formatEther(tx.value));
+
             if (tx.to.toLowerCase() === address.toLowerCase()) {
                 balance = balance + value; // Inbound transaction
             }
+
             if (tx.from.toLowerCase() === address.toLowerCase()) {
                 balance = balance - value; // Outbound transaction
-                balance = balance - ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed));
+                balance = balance - ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed)); // Deduct gas fees
             }
-            balanceHistory.push({ timestamp: tx.timeStamp, balance: ethers.formatEther(balance) });
-        });
-        console.log(balanceHistory);
 
+            balanceHistory.push({ timestamp: tx.timeStamp, balance: ethers.formatEther(balance) });
+        }
+
+        const xValue = balanceHistory.map(item => new Date(item.timestamp * 1000)); // Convert to Date object
+        const yValue = balanceHistory.map(item => parseFloat(item.balance)); // Convert balance to float
+
+        setBalanceChartValues([xValue, yValue]);
+
+        console.log(balanceHistory);
     };
 
     //function to get historical marketprice of token
@@ -179,6 +192,10 @@ const MetaMaskComponent = () => {
         try {
             const response = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from=${startDate}&to=${endDate}`, options);
             const data = await response.json();
+            const xValue = data['prices'].map(elem => new Date(elem[0]));
+            const yValue = data['prices'].map(elem => elem[1]);
+            setMarketPriceHistory([xValue, yValue])
+
             console.log(' historical price')
             console.log(data['prices']);
         } catch (err) {
@@ -263,7 +280,7 @@ const MetaMaskComponent = () => {
             showNotification('Info', `Transaction Hash: ${transactionResponse.hash}`, 'info');
             await transactionResponse.wait();
             showNotification('Success', 'Transaction Mined', 'success');
-            console.log( 'transation response' , transactionResponse)
+            console.log('transation response', transactionResponse)
         } catch (error) {
             showNotification('Error', `Transation Failed. Error ${error.code}`, 'danger');
             console.error(JSON.stringify(error));
@@ -272,164 +289,171 @@ const MetaMaskComponent = () => {
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-    <h2 style={{ textAlign: 'center', color: '#333' }}>MetaMask Interaction</h2>
-    <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-        <button
-            onClick={connectToMetaMask}
-            style={{
-                margin: '5px',
-                padding: '10px 20px',
-                backgroundColor: '#007bff',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            }}
-        >
-            Connect to MetaMask
-        </button>
-    </div>
-    <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-        <input
-            type="text"
-            placeholder="Enter Address Key"
-            value={manualAddress}
-            onChange={(e) => setManualAddress(e.target.value)}
-            style={{
-                padding: '10px',
-                marginRight: '10px',
-                borderRadius: '5px',
-                border: '1px solid #ccc'
-            }}
-        />
-        <button
-            onClick={connectToMetaMaskManually}
-            style={{
-                padding: '10px 20px',
-                backgroundColor: '#28a745',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            }}
-        >
-            Connect Manually
-        </button>
-    </div>
+            <h2 style={{ textAlign: 'center', color: '#333' }}>MetaMask Interaction</h2>
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <button
+                    onClick={connectToMetaMask}
+                    style={{
+                        margin: '5px',
+                        padding: '10px 20px',
+                        backgroundColor: '#007bff',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Connect to MetaMask
+                </button>
+            </div>
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <input
+                    type="text"
+                    placeholder="Enter Address Key"
+                    value={manualAddress}
+                    onChange={(e) => setManualAddress(e.target.value)}
+                    style={{
+                        padding: '10px',
+                        marginRight: '10px',
+                        borderRadius: '5px',
+                        border: '1px solid #ccc'
+                    }}
+                />
+                <button
+                    onClick={connectToMetaMaskManually}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#28a745',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Connect Manually
+                </button>
+            </div>
+            {balanceChartValues ? (<div style={{ width: '80%', height: '400px', margin: '20px auto', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
+                {<PriceChart xData={balanceChartValues[0]} yData={balanceChartValues[1]} />}
+            </div>) : null}
 
-    <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-    <input
-        type="text"
-        placeholder="Recipient Address"
-        id="recipient"
-        style={{
-            padding: '10px',
-            marginRight: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ccc',
-            width: 'calc(40% - 20px)'
-        }}
-    />
-    <input
-        type="text"
-        placeholder="Amount (ETH)"
-        id="amount"
-        style={{
-            padding: '10px',
-            marginRight: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ccc',
-            width: 'calc(20% - 20px)'
-        }}
-    />
-    <button
-        onClick={() => sendTransaction(document.getElementById('recipient').value, document.getElementById('amount').value)}
-        style={{
-            padding: '10px 20px',
-            backgroundColor: '#ffc107',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-        }}
-    >
-        Send Transaction
-    </button>
-</div>
 
-    <div style={{ textAlign: 'center', fontSize: '18px', color: '#333' }}>
-        <div>Address: {walletAddress}</div>
-        <div>Balance: {balance} ETH</div>
-        <div>Transaction Hash: {transactionHash}</div>
-    </div>
 
-    <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginTop: '30px' }}>
-        <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>Token Watchlist</h2>
-        <input
-            type="text"
-            value={newTokenAddress}
-            onChange={(e) => setNewTokenAddress(e.target.value)}
-            placeholder="Enter token contract address"
-            style={{
-                padding: '10px',
-                width: 'calc(100% - 120px)',
-                marginRight: '10px',
-                borderRadius: '5px',
-                border: '1px solid #ccc'
-            }}
-        />
-        <button
-            onClick={addTokenToWatchlist}
-            style={{
-                margin:'10px',
-                padding: '10px 20px',
-                backgroundColor: '#007bff',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-            }}
-        >
-            Add to Watchlist
-        </button>
-        <ul style={{ listStyle: 'none', paddingLeft: '0', marginTop: '20px' }}>
-            {watchlist.map(address => (
-                <li key={address} style={{
-                    padding: '15px',
-                    backgroundColor: '#fff',
-                    borderRadius: '5px',
-                    marginBottom: '15px',
-                    boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)'
-                }}>
-                    {tokenData[address] ? (
-                        <div style={{ textAlign: 'center' }}>
-                            <h3 style={{ margin: '0 0 10px 0' }}>{tokenData[address].name} ({tokenData[address].symbol})</h3>
-                            <p style={{ margin: '0 0 10px 0' }}>Balance: {tokenData[address].balance} {tokenData[address].symbol}</p>
-                            <button
-                                onClick={() => removeTokenFromWatchlist(address)}
-                                style={{
-                                    padding: '8px 16px',
-                                    backgroundColor: '#dc3545',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: '5px',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                Remove
-                            </button>
-                        </div>
-                    ) : (
-                        <p style={{ textAlign: 'center' }}>Loading data for {address}...</p>
-                    )}
-                  {walletAddress && <TokenHistory walletAddress={walletAddress} contractAddress={address} />}
+            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                <input
+                    type="text"
+                    placeholder="Recipient Address"
+                    id="recipient"
+                    style={{
+                        padding: '10px',
+                        marginRight: '10px',
+                        borderRadius: '5px',
+                        border: '1px solid #ccc',
+                        width: 'calc(40% - 20px)'
+                    }}
+                />
+                <input
+                    type="text"
+                    placeholder="Amount (ETH)"
+                    id="amount"
+                    style={{
+                        padding: '10px',
+                        marginRight: '10px',
+                        borderRadius: '5px',
+                        border: '1px solid #ccc',
+                        width: 'calc(20% - 20px)'
+                    }}
+                />
+                <button
+                    onClick={() => sendTransaction(document.getElementById('recipient').value, document.getElementById('amount').value)}
+                    style={{
+                        padding: '10px 20px',
+                        backgroundColor: '#ffc107',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Send Transaction
+                </button>
+            </div>
 
-                </li>
-            ))}
-        </ul>
-    </div>
-    
-</div>
+            <div style={{ textAlign: 'center', fontSize: '18px', color: '#333' }}>
+                <div>Address: {walletAddress}</div>
+                <div>Balance: {balance} ETH</div>
+                {/* <div>Transaction Hash: {transactionHash}</div> */}
+            </div>
+
+            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginTop: '30px' }}>
+                <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>Token Watchlist</h2>
+                <input
+                    type="text"
+                    value={newTokenAddress}
+                    onChange={(e) => setNewTokenAddress(e.target.value)}
+                    placeholder="Enter token contract address"
+                    style={{
+                        padding: '10px',
+                        width: 'calc(100% - 120px)',
+                        marginRight: '10px',
+                        borderRadius: '5px',
+                        border: '1px solid #ccc'
+                    }}
+                />
+                <button
+                    onClick={addTokenToWatchlist}
+                    style={{
+                        margin: '10px',
+                        padding: '10px 20px',
+                        backgroundColor: '#007bff',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '5px',
+                        cursor: 'pointer'
+                    }}
+                >
+                    Add to Watchlist
+                </button>
+                <ul style={{ listStyle: 'none', paddingLeft: '0', marginTop: '20px' }}>
+                    {watchlist.map(address => (
+                        <li key={address} style={{
+                            padding: '15px',
+                            backgroundColor: '#fff',
+                            borderRadius: '5px',
+                            marginBottom: '15px',
+                            boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)'
+                        }}>
+                            {tokenData[address] ? (
+                                <div style={{ textAlign: 'center' }}>
+                                    <h3 style={{ margin: '0 0 10px 0' }}>{tokenData[address].name} ({tokenData[address].symbol})</h3>
+                                    <p style={{ margin: '0 0 10px 0' }}>Balance: {tokenData[address].balance} {tokenData[address].symbol}</p>
+                                    <button
+                                        onClick={() => removeTokenFromWatchlist(address)}
+                                        style={{
+                                            padding: '8px 16px',
+                                            backgroundColor: '#dc3545',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '5px',
+                                            cursor: 'pointer'
+                                        }}
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            ) : (
+                                <p style={{ textAlign: 'center' }}>Loading data for {address}...</p>
+                            )}
+                            {walletAddress && <TokenHistory walletAddress={walletAddress} contractAddress={address} />}
+                            <div>
+                                {marketPriceHistory && <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} />}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+
+        </div>
 
     );
 };
