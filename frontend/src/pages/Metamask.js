@@ -21,19 +21,17 @@ const TOKEN_ABI = [
 const MetaMaskComponent = () => {
     const [provider, setProvider] = useState(null);
     const [signer, setSigner] = useState(null);
-    const [balance, setBalance] = useState('');
+    const [balance, setBalance] = useState(null);
     const [transactionHash, setTransactionHash] = useState('');
     const [walletAddress, setWalletAddress] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
     const [manualAddress, setManualAddress] = useState('');
+    const [manualConnected, setManualConnected] = useState(false);
+    const [metaMaskConnected, setMetaMaskConnected] = useState(false);
     // const [startDate, setStartDate] = useState(new Date);
     const [watchlist, setWatchlist] = useState([]);
     const [newTokenAddress, setNewTokenAddress] = useState('');
     const [tokenData, setTokenData] = useState({});
 
-    const [recipient, setRecipient] = useState('');
-    const [amount, setAmount] = useState('')
-    const [status, setStatus] = useState('')
     const [marketPriceHistory, setMarketPriceHistory] = useState(null);
     const [balanceChartValues, setBalanceChartValues] = useState(null);
     // useEffect(() => {
@@ -67,61 +65,45 @@ const MetaMaskComponent = () => {
             }
         });
     };
-    // token addition to watchlist, getting their balances:
 
-    const fetchTokenData = async (watchlist) => {
-        // const provider = new ethers.BrowserProvider(window.ethereum);
-        const provider = new ethers.getDefaultProvider('mainnet');
+    const getInitialBalance = async (address, blockNumber, provider, showNotification) => {
         try {
-            const data = {};
-            console.log(watchlist);
-
-            for (const address of watchlist) {
-                const tokenContract = new ethers.Contract(address, TOKEN_ABI, provider);
-                const [name, symbol, decimals] = await Promise.all([
-                    tokenContract.name(),
-                    tokenContract.symbol(),
-                    tokenContract.decimals()
-                ]);
-
-
-
-                const balance = await tokenContract.balanceOf(walletAddress);
-
-                data[address] = {
-                    name,
-                    symbol,
-                    decimals,
-                    balance: ethers.formatUnits(balance, decimals)
-                };
-            }
-            console.log("inside fetchtokendata");
-
-            console.log(data);
-
-            setTokenData(data);
+            const balance = await provider.getBalance(address, ethers.toBigInt(blockNumber));
+            return ethers.formatEther(balance);
         } catch (error) {
-            console.error('Error:', error);
+            showNotification('Error', 'Failed to fetch initial balance', 'danger');
+            return '0';// default to 0, 
         }
     };
 
+    const calculateHistoricalBalance = async (address, transactions, provider, showNotification, setBalanceChartValues) => {
+        try {
+            const initialBalance = await getInitialBalance(address, transactions[0].blockNumber, provider, showNotification);
+            let balance = ethers.parseEther(initialBalance);
+            const balanceHistory = [{ timestamp: transactions[0].timeStamp, balance: initialBalance }];
 
-    const addTokenToWatchlist = () => {
-        if (ethers.isAddress(newTokenAddress)) {
-            let newWatchlist = watchlist;
-            newWatchlist = [...newWatchlist, newTokenAddress];
-            setWatchlist([...watchlist, newTokenAddress]);
-            setNewTokenAddress('');
-            fetchTokenData(newWatchlist, provider);
+            for (let i = 1; i < transactions.length; i++) {
+                const tx = transactions[i];
+                const value = ethers.parseEther(ethers.formatEther(tx.value));
+                if (tx.to.toLowerCase() === address.toLowerCase()) {
+                    balance = balance.add(value); // Inbound transaction
+                }
+                if (tx.from.toLowerCase() === address.toLowerCase()) {
+                    balance = balance.sub(value); // Outbound transaction
+                    balance = balance.sub(ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed))); // Deduct gas fees
+                }
+                balanceHistory.push({ timestamp: tx.timeStamp, balance: ethers.formatEther(balance) });
+            }
+
+            const xValue = balanceHistory.map(item => new Date(item.timestamp * 1000)); // Convert to Date object
+            const yValue = balanceHistory.map(item => parseFloat(item.balance)); // Convert balance to float
+            setBalanceChartValues([xValue, yValue]);
+        } catch (error) {
+            showNotification('Error', 'Failed to calculate historical balance', 'danger');
         }
     };
 
-    const removeTokenFromWatchlist = (address) => {
-        setWatchlist(watchlist.filter(item => item !== address));
-    };
-    // endhere
-
-    const getTransactionHistory = async (address) => {
+    const getTransactionHistory = async (address) => { // and from this transation list, we will calculate balace over time of user account
         if (address) {
             const url = `${baseUrl}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${apiKey}`;
             const response = await fetch(url);
@@ -136,96 +118,32 @@ const MetaMaskComponent = () => {
         } else {
             showNotification('Error', `Wallet Address missing: ${address}`, 'danger')
         }
-
     };
 
-
-    const getInitialBalance = async (address, blockNumber, provider) => {
-        const balance = await provider.getBalance(address, ethers.toBigInt(blockNumber));
-        console.log(balance, 'getInitialBalance');
-        return ethers.formatEther(balance);
-    };
-
-    const calculateHistoricalBalance = async (address, transactions, provider) => {
-        console.log(address, 'address', transactions);
-        const initialBalance = await getInitialBalance(address, transactions[0].blockNumber, provider);
-        let balance = ethers.parseEther(initialBalance);
-
-        const balanceHistory = [{ timestamp: transactions[0].timeStamp, balance: initialBalance }];
-
-        for (let i = 1; i < transactions.length; i++) {
-            const tx = transactions[i];
-            const value = ethers.parseEther(ethers.formatEther(tx.value));
-
-            if (tx.to.toLowerCase() === address.toLowerCase()) {
-                balance = balance + value; // Inbound transaction
-            }
-
-            if (tx.from.toLowerCase() === address.toLowerCase()) {
-                balance = balance - value; // Outbound transaction
-                balance = balance - ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed)); // Deduct gas fees
-            }
-
-            balanceHistory.push({ timestamp: tx.timeStamp, balance: ethers.formatEther(balance) });
-        }
-
-        const xValue = balanceHistory.map(item => new Date(item.timestamp * 1000)); // Convert to Date object
-        const yValue = balanceHistory.map(item => parseFloat(item.balance)); // Convert balance to float
-
-        setBalanceChartValues([xValue, yValue]);
-
-        console.log(balanceHistory);
-    };
-
-    //function to get historical marketprice of token
-    const fetchHistoricalPrice = async () => {
-        const options = {
-            method: 'GET',
-            headers: { accept: 'application/json', 'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1' }
-        };
-
-        const secondsInMonth = 2629743;
-        const date = new Date();
-        const endDate = Math.floor(date.getTime() / 1000);
-        const startDate = endDate - (3 * secondsInMonth);
-
-        try {
-            const response = await fetch(`https://api.coingecko.com/api/v3/coins/bitcoin/market_chart/range?vs_currency=usd&from=${startDate}&to=${endDate}`, options);
-            const data = await response.json();
-            const xValue = data['prices'].map(elem => new Date(elem[0]));
-            const yValue = data['prices'].map(elem => elem[1]);
-            setMarketPriceHistory([xValue, yValue])
-
-            console.log(' historical price')
-            console.log(data['prices']);
-        } catch (err) {
-            console.error(err);
-        }
-    }
-
-    // fetch user's connected account etherem balance
     const fetchEthBalance = async (address) => {
         if (!provider || !address) return;
         try {
             const balance = await provider.getBalance(address);
             const formattedBalance = ethers.formatEther(balance);
-            setBalance(formattedBalance);
             showNotification('Info', `Balance fetched: ${formattedBalance} ETH`, 'info');
+            setBalance(formattedBalance);
         } catch (error) {
             showNotification('Error', 'Failed to fetch balance', 'danger');
-            console.error('Failed to fetch balance', error);
         }
     };
-    const connectToMetaMaskManually = async () => {
+
+    useEffect(() => {
+        if (walletAddress || manualAddress) { fetchEthBalance(walletAddress || manualAddress); }
+    }, [walletAddress, manualAddress, provider]);
+
+    const connectToMetaMaskManually = async (manualAddress) => {
         try {
             if (ethers.isAddress(manualAddress)) {
                 const newProvider = new ethers.getDefaultProvider(DEFAULT_NETWORK);
                 setProvider(newProvider)
                 setWalletAddress(manualAddress);
-                setIsConnected(false)
+                setManualConnected(true)
                 showNotification('Success', `Manually connected address: ${manualAddress}`, 'success');
-                await fetchEthBalance(manualAddress);
-                await fetchHistoricalPrice(walletAddress)
                 const transactionList = await getTransactionHistory(manualAddress);
                 await calculateHistoricalBalance(manualAddress, transactionList, newProvider)
             } else {
@@ -233,7 +151,6 @@ const MetaMaskComponent = () => {
             }
         } catch (error) {
             showNotification('Error', `Failed to connect manually. \n${error.code}`, 'danger');
-            console.error('Failed to connect manually:', error);
         }
     };
     const connectToMetaMask = async () => {
@@ -243,128 +160,316 @@ const MetaMaskComponent = () => {
                 const newProvider = new ethers.BrowserProvider(window.ethereum);
                 const newSigner = await newProvider.getSigner();
                 const walletAddress = await newSigner.getAddress();
-
                 setProvider(newProvider);
                 setSigner(newSigner);
                 setWalletAddress(walletAddress);
-                setIsConnected(true);
                 showNotification('Success', `Connected address: ${walletAddress}`, 'success');
-                setIsConnected(true)
-                await fetchEthBalance(walletAddress);
-                await fetchHistoricalPrice(walletAddress)
+                setMetaMaskConnected(true)
                 const transactionList = await getTransactionHistory(walletAddress);
                 await calculateHistoricalBalance(walletAddress, transactionList, newProvider)
-
             } catch (error) {
                 showNotification('Error', `User denied account access. \n${error.code}`, 'danger');
                 console.error('User denied account access', error);
             }
         } else {
-            showNotification('Error', 'MetaMask is not installed', 'danger');
+            showNotification('Error', 'MetaMask is not installed. Please add MetaMask extension to your browser.', 'danger');
             console.error('MetaMask is not installed');
         }
     };
 
-
     const sendTransaction = async (toAddress, amountInEther) => {
         if (!signer) return;
-
-        const tx = {
-            to: toAddress,
-            value: ethers.parseEther(amountInEther),
-        };
-
+        const tx = { to: toAddress, value: ethers.parseEther(amountInEther), };
         try {
             const transactionResponse = await signer.sendTransaction(tx);
             setTransactionHash(transactionResponse.hash);
             showNotification('Info', `Transaction Hash: ${transactionResponse.hash}`, 'info');
             await transactionResponse.wait();
             showNotification('Success', 'Transaction Mined', 'success');
-            console.log('transation response', transactionResponse)
         } catch (error) {
             showNotification('Error', `Transation Failed. Error ${error.code}`, 'danger');
-            console.error(JSON.stringify(error));
         }
     };
+    // -----------------------------------------------------------------------------------------------------------------------------
+
+    const [selectedCoinId, setSelectedCoinId] = useState('');
+    const [watchList, setWatchList] = useState([]);
+    const [coinList, setCoinList] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredCoins, setFilteredCoins] = useState([]);
+    const [showHistoricalChart, setShowHistoricalChart] = useState(false);
+    const [showDateInputs, setShowDateInputs] = useState(false);
+    const [startDate, setStartDate] = useState(null);
+    const [endDate, setEndDate] = useState(null);
+    const [coinDetails, setCoinDetails] = useState(null);
+    const [showCoinDetails, setShowCoinDetails] = useState(false)
+    const [coinDetailsLoading, setCoinDetailsLoading]= useState(false)
+
+
+    useEffect(() => {
+        const fetchCoinList = async () => {
+            const options = {
+                method: 'GET',
+                headers: {
+                    accept: 'application/json',
+                    'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1'
+                }
+            };
+            try {
+                const response = await fetch('https://api.coingecko.com/api/v3/coins/list', options);
+                const coins = await response.json();
+                setCoinList(coins);
+            } catch (error) {
+                console.error('Error fetching coin list:', error);
+            }
+        };
+        fetchCoinList();
+    }, []);
+
+    useEffect(() => {
+        if (coinList) {
+            const lowercasedQuery = searchQuery.toLowerCase();
+            const filtered = coinList.filter(coin =>
+                coin.name.toLowerCase().includes(lowercasedQuery) ||
+                coin.symbol.toLowerCase().includes(lowercasedQuery)
+            );
+            setFilteredCoins(filtered);
+        }
+    }, [searchQuery, coinList]);
+
+    const addToWatchList = (coin) => {
+        if (!coin) return;
+        console.log(coin)
+        setWatchList(prevWatchList => [...prevWatchList, coin]);
+    };
+
+    const handleRemoveCoin = (coinId) => {
+        setWatchList(watchList.filter(coin => coin.id !== coinId));
+    };
+
+    const handleCoinDetails = async (coinId) => {
+        if (!(manualConnected || metaMaskConnected)) {
+            showNotification('Error', `Connect to your account to fetch details of coin ${coinId}.`, 'danger');
+            return;
+        }
+        setCoinDetailsLoading(true)
+        const provider = ethers.getDefaultProvider('mainnet');
+        try {
+            const response = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+            }
+            const coinInfo = await response.json();
+            const detailPlatforms = coinInfo.detail_platforms;
+
+            if (!detailPlatforms || Object.keys(detailPlatforms).length === 0) {
+                throw new Error('No platforms found in detail_platforms');
+            }
+
+            // Fetch the first platform's details
+            const firstPlatform = Object.keys(detailPlatforms)[0];
+            const contractAddress = detailPlatforms[firstPlatform]?.contract_address;
+
+            if (!contractAddress) {
+                throw new Error('Contract address not found');
+            }
+
+            const tokenContract = new ethers.Contract(contractAddress, TOKEN_ABI, provider);
+            const [ decimals] = await Promise.all([
+                tokenContract.decimals()
+            ]);
+
+            // Fetch the balance
+            const balance = await tokenContract.balanceOf(walletAddress);
+            const formattedBalance = ethers.formatUnits(balance, decimals);
+
+            // Construct the new coin details object
+            const newCoinDetails = {
+                name: coinInfo.name,
+                symbol: coinInfo.symbol,
+                description: coinInfo.description.en,
+                platform: firstPlatform,
+                contractAddress,
+                balance: formattedBalance,
+                image: coinInfo.image.small,
+                homepage: coinInfo.links.homepage[0], // Taking the first homepage link
+                whitepaper: coinInfo.links.whitepaper,
+                blockchainSite: coinInfo.links.blockchain_site[0] // Taking the first blockchain site link
+            };
+
+            console.log('Coin details:', newCoinDetails);
+            setCoinDetails(newCoinDetails);
+            showNotification('Success', `Data for ${newCoinDetails.symbol} fetched successfully`, 'info');
+        } catch (error) {
+            showNotification('Error', 'Failed to fetch token data', 'danger');
+            console.error('Failed to fetch token data', error);
+        }
+        finally{
+            setCoinDetailsLoading(false)
+        }
+    };
+
+
+    const handleFutureTrends = (coinId) => {
+        console.log('Show future trends for:', coinId);
+    };
+
+    // Fetch historical price data of watchlist
+    const handleHistoricalCoinDataChart = (coinId, startDate, endDate) => {
+        if (showDateInputs) {
+            // Convert dates to Unix timestamps
+            const start = startDate ? Math.floor(new Date(startDate).getTime() / 1000) : Math.floor(Date.now() / 1000) - (3 * 2629743);
+            const end = endDate ? Math.floor(new Date(endDate).getTime() / 1000) : Math.floor(Date.now() / 1000);
+
+            handleHistoricalCoinData(coinId, start, end);
+            setShowHistoricalChart(true);
+        }
+    };
+    const handleHistoricalCoinData = async (coinId, start, end) => {
+        const options = {
+            method: 'GET',
+            headers: { accept: 'application/json', 'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1' }
+        };
+
+        try {
+            const response = await fetch(`https://api.coingecko.com/api/v3/coins/${coinId}/market_chart/range?vs_currency=usd&from=${start}&to=${end}`, options);
+            const data = await response.json();
+            const xValue = data['prices'].map(elem => new Date(elem[0]));
+            const yValue = data['prices'].map(elem => elem[1]);
+            setMarketPriceHistory([xValue, yValue]);
+
+            console.log('Historical price data:', data['prices']);
+        } catch (err) {
+            showNotification('Error', 'Failed to fetch historical price data', 'danger');
+            console.error('Failed to fetch historical price data', err);
+        }
+    };
+
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
             <h2 style={{ textAlign: 'center', color: '#333' }}>MetaMask Interaction</h2>
-            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-                <button
-                    onClick={connectToMetaMask}
-                    style={{
-                        margin: '5px',
-                        padding: '10px 20px',
-                        backgroundColor: '#007bff',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Connect to MetaMask
-                </button>
+
+            <div style={{
+                margin: '20px auto',
+                padding: '20px',
+                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+                borderRadius: '10px',
+                backgroundColor: '#fff',
+                border: '1px solid #ccc',
+                textAlign: 'center'
+            }}>
+                {!metaMaskConnected ? (<div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                    <button
+                        onClick={connectToMetaMask}
+                        style={{
+                            margin: '5px',
+                            padding: '10px',
+                            backgroundColor: '#007bff',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Connect to MetaMask
+                    </button>
+                    <p> OR </p>
+                </div>) : (
+                    null
+                )}
+
+
+                <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+                    <input
+                        type="text"
+                        placeholder="Enter Address Key"
+                        value={manualAddress}
+                        onChange={(e) => setManualAddress(e.target.value)}
+                        style={{
+                            padding: '10px',
+                            margin: '10px',
+                            borderRadius: '5px',
+                            border: '1px solid #ccc'
+                        }}
+                    />
+                    <button
+                        onClick={() => connectToMetaMaskManually(manualAddress)}
+                        style={{
+                            padding: '10px',
+                            backgroundColor: '#28a745',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '5px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Connect Manually
+                    </button>
+                </div>
+
+                {(metaMaskConnected || manualConnected) ? (
+                    <div style={{ textAlign: 'center', fontSize: '18px', color: '#333' }}>
+                        {balance ? <div>Balance: {balance} ETH</div> : null}
+                        {walletAddress ? <div>Address: {walletAddress}</div> : null}
+
+
+
+                        {balanceChartValues ? (
+                            <div style={{
+                                width: '80%',
+                                height: '400px',
+                                margin: '20px auto',
+                                padding: '20px',
+                                backgroundColor: '#f8f9fa',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
+                            }}>
+                                <PriceChart xData={balanceChartValues[0]} yData={balanceChartValues[1]} />
+                            </div>
+                        ) : null}
+                    </div>
+                ) : null}
+
             </div>
-            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
-                <input
-                    type="text"
-                    placeholder="Enter Address Key"
-                    value={manualAddress}
-                    onChange={(e) => setManualAddress(e.target.value)}
-                    style={{
-                        padding: '10px',
-                        marginRight: '10px',
-                        borderRadius: '5px',
-                        border: '1px solid #ccc'
-                    }}
-                />
-                <button
-                    onClick={connectToMetaMaskManually}
-                    style={{
-                        padding: '10px 20px',
-                        backgroundColor: '#28a745',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Connect Manually
-                </button>
-            </div>
-            {balanceChartValues ? (<div style={{ width: '80%', height: '400px', margin: '20px auto', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px', boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)' }}>
-                {<PriceChart xData={balanceChartValues[0]} yData={balanceChartValues[1]} />}
-            </div>) : null}
 
 
-
-            <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+            <div style={{
+                margin: '20px auto',
+                padding: '20px',
+                boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
+                borderRadius: '10px',
+                backgroundColor: '#fff',
+                border: '1px solid #ccc',
+                textAlign: 'center'
+            }}>
+                <p> {!metaMaskConnected ? ('Please connect via Meta Mask to enable transaction') : null} </p>
                 <input
                     type="text"
                     placeholder="Recipient Address"
                     id="recipient"
                     style={{
                         padding: '10px',
-                        marginRight: '10px',
+                        margin: '10px',
                         borderRadius: '5px',
                         border: '1px solid #ccc',
                         width: 'calc(40% - 20px)'
                     }}
                 />
+
                 <input
                     type="text"
                     placeholder="Amount (ETH)"
                     id="amount"
                     style={{
                         padding: '10px',
-                        marginRight: '10px',
+                        margin: '10px',
                         borderRadius: '5px',
                         border: '1px solid #ccc',
                         width: 'calc(20% - 20px)'
                     }}
                 />
-                <button
+                <button disabled={metaMaskConnected}
                     onClick={() => sendTransaction(document.getElementById('recipient').value, document.getElementById('amount').value)}
                     style={{
                         padding: '10px 20px',
@@ -379,82 +484,246 @@ const MetaMaskComponent = () => {
                 </button>
             </div>
 
-            <div style={{ textAlign: 'center', fontSize: '18px', color: '#333' }}>
-                <div>Address: {walletAddress}</div>
-                <div>Balance: {balance} ETH</div>
-                {/* <div>Transaction Hash: {transactionHash}</div> */}
-            </div>
+
 
             <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginTop: '30px' }}>
-                <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>Token Watchlist</h2>
-                <input
-                    type="text"
-                    value={newTokenAddress}
-                    onChange={(e) => setNewTokenAddress(e.target.value)}
-                    placeholder="Enter token contract address"
-                    style={{
-                        padding: '10px',
-                        width: 'calc(100% - 120px)',
-                        marginRight: '10px',
-                        borderRadius: '5px',
-                        border: '1px solid #ccc'
-                    }}
-                />
-                <button
-                    onClick={addTokenToWatchlist}
-                    style={{
-                        margin: '10px',
-                        padding: '10px 20px',
-                        backgroundColor: '#007bff',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '5px',
-                        cursor: 'pointer'
-                    }}
-                >
-                    Add to Watchlist
-                </button>
-                <ul style={{ listStyle: 'none', paddingLeft: '0', marginTop: '20px' }}>
-                    {watchlist.map(address => (
-                        <li key={address} style={{
-                            padding: '15px',
-                            backgroundColor: '#fff',
-                            borderRadius: '5px',
-                            marginBottom: '15px',
-                            boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)'
-                        }}>
-                            {tokenData[address] ? (
-                                <div style={{ textAlign: 'center' }}>
-                                    <h3 style={{ margin: '0 0 10px 0' }}>{tokenData[address].name} ({tokenData[address].symbol})</h3>
-                                    <p style={{ margin: '0 0 10px 0' }}>Balance: {tokenData[address].balance} {tokenData[address].symbol}</p>
+                <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>
+                    Coin Watchlist
+                </h2>
+
+                <div>
+                    {coinList.length ? (
+                        <div>
+                            <div style={{ marginBottom: '20px' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Search for a coin..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', marginBottom: '10px' }}
+                                />
+                                <select
+                                    value={selectedCoinId}
+                                    onChange={(e) => setSelectedCoinId(e.target.value)}
+                                    style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px' }}
+                                >
+                                    <option value="">Select a coin</option>
+                                    {filteredCoins.map((coin) => (
+                                        <option key={coin.id} value={coin.id}>
+                                            {coin.name} ({coin.symbol})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <button
+                                disabled={!selectedCoinId}
+                                onClick={() => {
+                                    const selectedCoin = coinList.find(coin => coin.id === selectedCoinId);
+                                    addToWatchList(selectedCoin);
+                                }}
+                                style={{ padding: '10px 20px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                            >
+                                Add to Watchlist
+                            </button>
+                        </div>
+                    ) : 'Please wait while we load the coin list...'}
+                </div>
+
+                <div style={{ marginTop: '20px' }}>
+                    <h3>Your Watchlist:</h3>
+                    <ul style={{ listStyleType: 'none', padding: 0 }}>
+                        {watchList.map((coin) => (
+                            <li
+                                key={coin.id}
+                                style={{
+                                    marginBottom: '10px',
+                                    padding: '10px',
+                                    backgroundColor: '#fff',
+                                    borderRadius: '5px',
+                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '10px'
+                                }}
+                            >
+                                <div style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    width: '100%',
+                                    padding: '10px',
+                                    boxSizing: 'border-box'
+                                }}>
+                                    <div style={{ flex: 1, textAlign: 'left' }}>
+                                        <strong>ID:</strong> {coin.id}
+                                    </div>
+                                    <div style={{ flex: 2, textAlign: 'center' }}>
+                                        <strong>Name:</strong> {coin.name}
+                                    </div>
+                                    <div style={{ flex: 1, textAlign: 'right' }}>
+                                        <strong>Symbol:</strong> {coin.symbol}
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
                                     <button
-                                        onClick={() => removeTokenFromWatchlist(address)}
+                                        onClick={() => handleRemoveCoin(coin.id)}
                                         style={{
-                                            padding: '8px 16px',
+                                            padding: '5px 10px',
                                             backgroundColor: '#dc3545',
                                             color: '#fff',
                                             border: 'none',
                                             borderRadius: '5px',
-                                            cursor: 'pointer'
+                                            cursor: 'pointer',
+                                            flex: 1
                                         }}
                                     >
                                         Remove
                                     </button>
+
+                                    <button
+                                        onClick={() => {
+                                            if (showDateInputs) {
+                                                setShowHistoricalChart(false);
+                                            }
+                                            setShowDateInputs(!showDateInputs);
+                                        }}
+                                        style={{
+                                            padding: '5px 10px',
+                                            backgroundColor: '#007bff',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '5px',
+                                            cursor: 'pointer',
+                                            flex: 1
+                                        }}
+                                    >
+                                        {showDateInputs ? 'Hide Historical Data Chart' : 'Show Historical Data Chart'}
+                                    </button>
+
+
+                                    <button disabled ={coinDetailsLoading}
+                                        onClick={() => {
+                                            if (!showCoinDetails) {
+                                                handleCoinDetails(coin.id);
+                                            }
+                                            setShowCoinDetails(!showCoinDetails);
+                                        }}
+                                        style={{
+                                            padding: '5px 10px',
+                                            backgroundColor: '#17a2b8',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '5px',
+                                            cursor: 'pointer',
+                                            flex: 1
+                                        }}
+                                    >
+                                        {showCoinDetails ? 'Hide Coin Details' : 'Show Coin Details'}
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleFutureTrends(coin.id)}
+                                        style={{
+                                            padding: '5px 10px',
+                                            backgroundColor: '#28a745',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: '5px',
+                                            cursor: 'pointer',
+                                            flex: 1
+                                        }}
+                                    >
+                                        Show Future Trends
+                                    </button>
                                 </div>
-                            ) : (
-                                <p style={{ textAlign: 'center' }}>Loading data for {address}...</p>
-                            )}
-                            {walletAddress && <TokenHistory walletAddress={walletAddress} contractAddress={address} />}
-                            <div>
-                                {marketPriceHistory && <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} />}
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                                {showDateInputs && (
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <label>
+                                            Start Date:
+                                            <input
+                                                type="date"
+                                                onChange={(e) => setStartDate(e.target.value)}
+                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
+                                            />
+                                        </label>
+                                        <label>
+                                            End Date:
+                                            <input
+                                                type="date"
+                                                onChange={(e) => setEndDate(e.target.value)}
+                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
+                                            />
+                                        </label>
+                                        <button
+                                            onClick={() => {
+                                                handleHistoricalCoinDataChart(coin.id, startDate, endDate);
+                                            }}
+                                            style={{
+                                                margin: '10px',
+                                                padding: '5px',
+                                                backgroundColor: '#007bff',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: '5px',
+                                                cursor: 'pointer',
+                                                flex: 1
+                                            }}
+                                        >
+                                            Show Chart
+                                        </button>
+                                    </div>
+                                )}
+                                {showHistoricalChart && (
+                                    <div style={{ marginTop: '20px', width: '100%' }}>
+                                        {marketPriceHistory ? (
+                                            <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} chartTitle={`${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days price variations`} />
+                                        ) : 'Loading chart...'}
+                                    </div>
+                                )}
+
+                                {coinDetails && showCoinDetails && (
+                                    <div style={{width : '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+                                        <h1><strong>Name:</strong>{coinDetails.name}</h1>
+                                        <img
+                                            src={coinDetails.image}
+                                            alt={`${coinDetails.name} logo`}
+                                            style={{ width: '100px', height: '100px', borderRadius: '10px' }}
+                                        />
+                                        <h2><strong>Symbol:</strong>{coinDetails.symbol}</h2>
+                                        <p><strong>Description:</strong> {coinDetails.description}</p>
+                                        <p><strong>Platform:</strong> {coinDetails.platform}</p>
+                                        <p><strong>Contract Address:</strong> {coinDetails.contractAddress}</p>
+                                        <p><strong>Balance:</strong> {coinDetails.balance}</p>
+                                        <p><strong>Homepage:</strong> <a href={coinDetails.homepage} target="_blank" rel="noopener noreferrer">{coinDetails.homepage}</a></p>
+                                        <p><strong>Whitepaper:</strong> <a href={coinDetails.whitepaper} target="_blank" rel="noopener noreferrer">{coinDetails.whitepaper}</a></p>
+                                        <p><strong>Blockchain Site:</strong> <a href={coinDetails.blockchainSite} target="_blank" rel="noopener noreferrer">{coinDetails.blockchainSite}</a></p>
+                                    </div>
+                                )}
+
+
+
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             </div>
 
-        </div>
 
+
+
+
+
+
+
+
+
+
+
+
+
+        </div>
     );
 };
 

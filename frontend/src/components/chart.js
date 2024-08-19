@@ -11,7 +11,7 @@ import {
     Title,
     Tooltip,
     Legend,
-    TimeScale,  
+    TimeScale,
 } from 'chart.js';
 
 // Register the required components for Chart.js
@@ -26,7 +26,7 @@ ChartJS.register(
     TimeScale,
 );
 
-function PriceChart({ xData, yData}) {
+function PriceChart({ xData, yData, chartTitle }) {
     const data = {
         labels: xData,
         datasets: [
@@ -49,7 +49,7 @@ function PriceChart({ xData, yData}) {
             },
             title: {
                 display: true,
-                text: '90-Day Price Variation',
+                text: chartTitle,
             },
         },
         scales: {
