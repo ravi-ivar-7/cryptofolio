@@ -164,7 +164,7 @@ const MetaMaskComponent = () => {
 
     };
 
-    //function to get historical masterprice of token
+    //function to get historical marketprice of token
     const fetchHistoricalPrice = async () => {
         const options = {
             method: 'GET',
@@ -186,6 +186,7 @@ const MetaMaskComponent = () => {
         }
     }
 
+    // fetch user's connected account etherem balance
     const fetchEthBalance = async (address) => {
         if (!provider || !address) return;
         try {
@@ -214,7 +215,7 @@ const MetaMaskComponent = () => {
                 showNotification("Error", "Invalid Ethereum address. Please check and try again.", "danger");
             }
         } catch (error) {
-            showNotification('Error', 'Failed to connect manually', 'danger');
+            showNotification('Error', `Failed to connect manually. \n${error.code}`, 'danger');
             console.error('Failed to connect manually:', error);
         }
     };
@@ -238,7 +239,7 @@ const MetaMaskComponent = () => {
                 await calculateHistoricalBalance(walletAddress, transactionList, newProvider)
 
             } catch (error) {
-                showNotification('Error', 'User denied account access', 'danger');
+                showNotification('Error', `User denied account access. \n${error.code}`, 'danger');
                 console.error('User denied account access', error);
             }
         } else {
@@ -262,9 +263,10 @@ const MetaMaskComponent = () => {
             showNotification('Info', `Transaction Hash: ${transactionResponse.hash}`, 'info');
             await transactionResponse.wait();
             showNotification('Success', 'Transaction Mined', 'success');
+            console.log( 'transation response' , transactionResponse)
         } catch (error) {
-            showNotification('Error', 'Transaction Failed', 'danger');
-            console.error('Transaction Failed', error);
+            showNotification('Error', `Transation Failed. Error ${error.code}`, 'danger');
+            console.error(JSON.stringify(error));
         }
     };
 
