@@ -37,16 +37,16 @@ const MetaMaskComponent = () => {
     const [user, setUser] = useState()
 
     useEffect(() => {
-        const cryptofolioUserName= localStorage.getItem('cryptofolioUserName');
+        const cryptofolioUserName = localStorage.getItem('cryptofolioUserName');
         const cryptofolioUserEmail = localStorage.getItem('cryptofolioUserEmail');
         const cryptofolioToken = localStorage.getItem('cryptofolioToken');
-        if ( !cryptofolioUserName || !cryptofolioUserEmail || !cryptofolioToken) {
+        if (!cryptofolioUserName || !cryptofolioUserEmail || !cryptofolioToken) {
             localStorage.removeItem('cryptofolioToken')
             localStorage.removeItem('cryptofolioUser')
             setIsAuthenticated(false)
         }
         else {
-            setUser({email: cryptofolioUserEmail, name: cryptofolioUserName})
+            setUser({ email: cryptofolioUserEmail, name: cryptofolioUserName })
             setIsAuthenticated(!!cryptofolioToken && !!cryptofolioUserName && !!cryptofolioUserEmail);
         }
 
@@ -56,10 +56,9 @@ const MetaMaskComponent = () => {
         localStorage.setItem('cryptofolioUserEmail', user.email);
         localStorage.setItem('cryptofolioUserName', user.name);
         localStorage.setItem('cryptofolioToken', token);
-        setUser({email: user.email, name: user.name})
+        setUser({ email: user.email, name: user.name })
         setIsAuthenticated(true);
     };
-    console.log(user)
 
     const showNotification = (title, message, type) => {
         Store.addNotification({
@@ -230,7 +229,7 @@ const MetaMaskComponent = () => {
                 method: 'GET',
                 headers: {
                     accept: 'application/json',
-                    'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1'
+                    'x-cg-api-key': COINGECKO_APIKEYS
                 }
             };
             try {
@@ -241,8 +240,53 @@ const MetaMaskComponent = () => {
                 console.error('Error fetching coin list:', error);
             }
         };
+
+        const fetchWatchList = async () => {
+            try {
+                const token = localStorage.getItem('cryptofolioToken');
+
+                const response = await fetch(`${NODEJS_BASEURL}/get-watchlist`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`,
+                    },
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    showNotification('Error', errorData.warn || 'An error occurred during fetching the watchlist.', 'danger');
+                    return;
+                }
+                const data = await response.json();
+                const watchList = data.watchList;
+
+                if (watchList.length > 0) {
+                    // Access the first object in the array
+                    const watchListItem = watchList[0];
+                    // Extract coins from the first item
+                    const { coins } = watchListItem;
+                    // Set the state with the coins array
+                    setWatchList(coins);
+                } else {
+                    showNotification('Error', 'Watchlist is empty.', 'warning');
+                    setWatchList([]); 
+                }
+            } catch (error) {
+                console.log('Error fetching watchlist:', error);
+                showNotification('Error', 'An error occurred during fetching the watchlist.', 'danger');
+            }
+        };
+
+
         fetchCoinList();
-    }, []);
+        if (isAuthenticated) {
+            fetchWatchList();
+        }
+    }, [isAuthenticated]);
+
+
+
     useEffect(() => {
         if (coinList) {
             const lowercasedQuery = searchQuery.toLowerCase();
@@ -253,16 +297,64 @@ const MetaMaskComponent = () => {
             setFilteredCoins(filtered);
         }
     }, [searchQuery, coinList]);
-    const addToWatchList = (coin) => {
+
+    const addToWatchList = async (coin) => {
         if (!coin) return;
-        setWatchList(prevWatchList => [...prevWatchList, coin]);
+
+        try {
+            const token = localStorage.getItem('cryptofolioToken');
+
+            const response = await fetch(`${NODEJS_BASEURL}/add-to-watchlist`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ user, coin }),
+            });
+
+            const data = await response.json();
+            if (response.status === 200) {
+                setWatchList(prevWatchList => [...prevWatchList, coin]);
+            } else {
+                console.log(data.warn);
+                showNotification('Error', data.warn || 'An error occurred during adding coin to watchlist.', 'danger');
+            }
+        } catch (error) {
+            console.log(error);
+            showNotification('Error', 'An error occurred during adding coin to watchlist.', 'danger');
+        }
     };
-    const handleRemoveCoin = (coinId) => {
 
 
 
-        setWatchList(watchList.filter(coin => coin.id !== coinId));
+
+    const handleRemoveCoin = async (coinId) => {
+        try {
+            const token = localStorage.getItem('cryptofolioToken');
+
+            const response = await fetch(`${NODEJS_BASEURL}/remove-from-watchlist`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ user, coinId }),
+            });
+
+            const data = await response.json();
+            if (response.status === 200) {
+                setWatchList(watchList.filter(coin => coin.id !== coinId));
+            } else {
+                console.log(data.warn);
+                showNotification('Error', data.warn || 'An error occurred during removing coin from watchlist.', 'danger');
+            }
+        } catch (error) {
+            console.log(error);
+            showNotification('Error', 'An error occurred during removing coin from watchlist.', 'danger');
+        }
     };
+
 
     const hanldeCoinIdForAnalysis = async (coinId) => {
         setCoinIdForAnalysis(coinId)
