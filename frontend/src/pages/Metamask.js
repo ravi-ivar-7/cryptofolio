@@ -23,6 +23,29 @@ const TOKEN_ABI = [
     "function decimals() view returns (uint8)"
 ];
 
+
+// ABI Definitions
+const ALLOWANCE_ABI = [
+    "function allowance(address owner, address spender) view returns (uint256)"
+];
+
+const APPROVE_ABI = [
+    "function approve(address spender, uint256 amount) public returns (bool)"
+];
+
+
+// const ALLOWANCE_TOKEN_ABI = [
+//     "function balanceOf(address account) view returns (uint256)",
+//     "function name() view returns (string)",
+//     "function symbol() view returns (string)",
+//     "function decimals() view returns (uint8)",
+//     "function allowance(address owner, address spender) view returns (uint256)",
+//     "function approve(address spender, uint256 amount) returns (bool)",
+//     "function transfer(address recipient, uint256 amount) returns (bool)",
+//     "function transferFrom(address sender, address recipient, uint256 amount) returns (bool)"
+// ];
+
+
 const MetaMaskComponent = () => {
     const [provider, setProvider] = useState(null);
     const [signer, setSigner] = useState(null);
@@ -259,7 +282,7 @@ const MetaMaskComponent = () => {
                     return;
                 }
                 const data = await response.json();
-                const watchList = data.watchList;
+                const watchList = data.watchList || []
 
                 if (watchList.length > 0) {
                     // Access the first object in the array
@@ -269,8 +292,8 @@ const MetaMaskComponent = () => {
                     // Set the state with the coins array
                     setWatchList(coins);
                 } else {
-                    showNotification('Error', 'Watchlist is empty.', 'warning');
-                    setWatchList([]); 
+                    showNotification('Warning', 'Watchlist is empty.', 'warning');
+                    setWatchList([]);
                 }
             } catch (error) {
                 console.log('Error fetching watchlist:', error);
@@ -303,7 +326,6 @@ const MetaMaskComponent = () => {
 
         try {
             const token = localStorage.getItem('cryptofolioToken');
-
             const response = await fetch(`${NODEJS_BASEURL}/add-to-watchlist`, {
                 method: 'POST',
                 headers: {
@@ -314,6 +336,7 @@ const MetaMaskComponent = () => {
             });
 
             const data = await response.json();
+            console.log(data)
             if (response.status === 200) {
                 setWatchList(prevWatchList => [...prevWatchList, coin]);
             } else {
@@ -321,13 +344,11 @@ const MetaMaskComponent = () => {
                 showNotification('Error', data.warn || 'An error occurred during adding coin to watchlist.', 'danger');
             }
         } catch (error) {
+            console.log('error')
             console.log(error);
-            showNotification('Error', 'An error occurred during adding coin to watchlist.', 'danger');
+            showNotification('Error', `An error occurred during adding coin to watchlist.${error}`, 'danger');
         }
     };
-
-
-
 
     const handleRemoveCoin = async (coinId) => {
         try {
@@ -351,7 +372,7 @@ const MetaMaskComponent = () => {
             }
         } catch (error) {
             console.log(error);
-            showNotification('Error', 'An error occurred during removing coin from watchlist.', 'danger');
+            showNotification('Error', `An error occurred during removing coin from watchlist.`, 'danger');
         }
     };
 
@@ -531,6 +552,81 @@ const MetaMaskComponent = () => {
         }
     };
 
+    // --------------------------------------------------- checking allowance and approving token
+
+    const [tokenAddress, setTokenAddress] = useState('');
+    const [spenderAddress, setSpenderAddress] = useState('');
+    const [amount, setAmount] = useState('');
+    const [allowance, setAllowance] = useState('0');
+
+
+    // Function to check token allowance
+    const checkTokenAllowance = async () => {
+        if (!metaMaskConnected) {
+            showNotification('Error', 'Please connect to MetaMask first.', 'danger');
+            return;
+        }
+        if (!provider || !signer) {
+            showNotification('Error', 'Provider or signer is not set up. Connect to MetaMask and wait for some time.', 'danger');
+            return;
+        }
+        if (!ethers.isAddress(tokenAddress)) {
+            showNotification('Error', 'Invalid token address provided.', 'danger');
+            return;
+        }
+
+        if (!ethers.isAddress(spenderAddress)) {
+            showNotification('Error', 'Invalid spender address provided.', 'danger');
+            return;
+        }
+
+        try {
+            // Create the contract instance
+            const contract = new ethers.Contract(tokenAddress, ALLOWANCE_ABI, provider);
+
+            // Fetch the allowance value
+            const allowanceValue = await contract.allowance(walletAddress, spenderAddress);
+
+            // Format and set the allowance value
+            setAllowance(ethers.formatUnits(allowanceValue, 18));
+        } catch (error) {
+            showNotification('Error', 'Failed to check allowance. Please ensure the contract address is correct and try again.', 'danger');
+            console.error('Error checking allowance:', error);
+        }
+    };
+
+    // Function to approve tokens
+    const approveToken = async () => {
+        if (!metaMaskConnected) {
+            showNotification('Error', 'Please connect to MetaMask first.', 'danger');
+            return;
+        }
+        if (!provider || !signer) {
+            showNotification('Error', 'Provider or signer is not set up. Connect to MetaMask and wait for some time.', 'danger');
+            return;
+        }
+        if (!ethers.isAddress(tokenAddress)) {
+            showNotification('Error', 'Invalid token address provided.', 'danger');
+            return;
+        }
+
+        if (!ethers.isAddress(spenderAddress)) {
+            showNotification('Error', 'Invalid spender address provided.', 'danger');
+            return;
+        }
+
+        try {
+            const amountInWei = ethers.parseUnits(amount, 18);
+            const contract = new ethers.Contract(tokenAddress, APPROVE_ABI, signer);
+            const tx = await contract.approve(spenderAddress, amountInWei);
+            await tx.wait();
+            showNotification('Success', `Approved ${ethers.formatUnits(amountInWei, 18)} tokens to ${spenderAddress}`, 'success');
+        } catch (error) {
+            showNotification('Error', 'Failed to approve tokens. Ensure the contract address is correct and try again.', 'danger');
+            console.error('Error approving tokens:', error);
+        }
+    };
+
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
             <h2 style={{ textAlign: 'center', color: '#333' }}>Cryptofolio</h2>
@@ -671,6 +767,63 @@ const MetaMaskComponent = () => {
                     Send Transaction
                 </button>
             </div>
+
+
+            <div style={{ padding: '20px', backgroundColor: '#495057', borderRadius: '10px', marginTop: '30px', color: '#fff', margin: 'auto' }}>
+                <h3 style={{ color: '#17a2b8' }}>Check Token Allowance</h3>
+                <input
+                    type="text"
+                    placeholder="Token Contract Address"
+                    value={tokenAddress}
+                    onChange={(e) => setTokenAddress(e.target.value)}
+                    style={{ padding: '10px', margin: '10px', borderRadius: '5px', border: '1px solid #ced4da' }}
+                />
+                <input
+                    type="text"
+                    placeholder="Spender Address"
+                    value={spenderAddress}
+                    onChange={(e) => setSpenderAddress(e.target.value)}
+                    style={{ padding: '10px', margin: '10px', borderRadius: '5px', border: '1px solid #ced4da' }}
+                />
+                <button
+                    onClick={checkTokenAllowance}
+                    style={{ padding: '10px', borderRadius: '5px', border: 'none', backgroundColor: '#17a2b8', color: '#fff', cursor: 'pointer' }}
+                >
+                    Check Allowance
+                </button>
+                <p style={{ margin: '10px' }}>Allowance: {allowance} tokens</p>
+
+                <h3 style={{ color: '#17a2b8' }}>Approve Tokens</h3>
+                <input
+                    type="text"
+                    placeholder="Token Contract Address"
+                    value={tokenAddress}
+                    onChange={(e) => setTokenAddress(e.target.value)}
+                    style={{ padding: '10px', margin: '10px', borderRadius: '5px', border: '1px solid #ced4da' }}
+                />
+                <input
+                    type="text"
+                    placeholder="Amount to Approve"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    style={{ padding: '10px', margin: '10px', borderRadius: '5px', border: '1px solid #ced4da' }}
+                />
+                <input
+                    type="text"
+                    placeholder="Spender Address"
+                    value={spenderAddress}
+                    onChange={(e) => setSpenderAddress(e.target.value)}
+                    style={{ padding: '10px', margin: '10px', borderRadius: '5px', border: '1px solid #ced4da' }}
+                />
+                <button
+                    onClick={approveToken}
+                    style={{ padding: '10px', borderRadius: '5px', border: 'none', backgroundColor: '#17a2b8', color: '#fff', cursor: 'pointer' }}
+                >
+                    Approve Token
+                </button>
+            </div>
+
+
 
             {isAuthenticated ? (
                 <div>

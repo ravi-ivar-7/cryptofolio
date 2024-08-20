@@ -21,8 +21,7 @@ Cryptofolio is a single-page application (SPA) designed to help users manage and
 - Ensure that your tokens are being managed securely.
 
 ### 5. **Token Operations**
-- Transfer tokens to another address directly from the app.
-- Approve tokens for use by another address, providing flexibility in your transactions.
+- Approve tokens for use by another address.
 
 ### 6. **Visual Representations**
 - Explore your portfolio through intuitive visualizations, including charts and graphs.
@@ -32,30 +31,139 @@ Cryptofolio is a single-page application (SPA) designed to help users manage and
 
 ### Frontend
 - **React.js**: A powerful JavaScript library for building the user interface.
-- **RSuite**: Responsive components for a clean and modern UI.
-- **react-router-dom**: For handling SPA routing.
+- **react-router-dom**: For handling Single Page Application (SPA) routing.
+- **Use-Case**: Provides the user interface, integrates with MetaMask for wallet interactions, and handles user interactions.
 
-### Backend
+### Backend (Node.js)
 - **Node.js**: A runtime environment for executing JavaScript on the server.
 - **Express.js**: A web application framework for building APIs.
+- **Use-Case**: Manages user watchlists and provides mechanisms for authentication and authorization.
+
+### Backend (FastAPI)
+- **FastAPI**: A modern, fast (high-performance) web framework for building APIs with Python 3.6+ based on standard Python type hints.
+- **Use-Case**: Analyzes historical cryptocurrency data and predicts trends using techniques such as exponential smoothing, ARIMA, Prophet, and Random Forest.
 
 ### Blockchain Integration
 - **Ether.js**: A library for interacting with the Ethereum blockchain.
-- **Reach**: A platform for building decentralized applications (DApps).
 
 ### Database
 - **MongoDB**: A NoSQL database for storing user data, token information, and transaction history.
 
-## Installation
+## Project Structure
 
-### Prerequisites
-- **Node.js** and **npm**: Ensure you have Node.js and npm installed.
-- **MetaMask** or other supported wallets installed on your browser.
+The project directory contains the following folders:
+- `frontend` - React frontend application
+- `backend-nodejs` - Node.js backend server
+- `backend-fastapi` - FastAPI backend server
 
-### Steps
+## Prerequisites
+
+Make sure you have the following installed on your machine:
+- [Node.js](https://nodejs.org/) (for the Node.js backend and React frontend)
+- [Python](https://www.python.org/) (for the FastAPI backend)
+- [pip](https://pip.pypa.io/en/stable/) (Python package installer)
+- [Poetry](https://python-poetry.org/) (for managing Python dependencies) (optional but recommended)
+- **MetaMask** wallets installed on your browser.
+
+## Setup and Installation
 
 1. **Clone the Repository**
    ```bash
    git clone git@github.com:ravi-ivar-7/cryptofolio.git
    cd cryptofolio
->>>>>>> b8c963c (updated readme)
+
+### Frontend (React)
+
+1. Navigate to the `frontend` directory:
+
+    ```bash
+    cd frontend
+    ```
+
+2. Install the dependencies:
+
+    ```bash
+    npm install
+    ```
+
+3. Start the development server:
+
+    ```bash
+    npm start
+    ```
+
+    The React application will be accessible at [http://localhost:3000](http://localhost:3000).
+
+### Backend (Node.js)
+
+1. Navigate to the `backend-nodejs` directory:
+
+    ```bash
+    cd backend-nodejs
+    ```
+
+2. Install the dependencies:
+
+    ```bash
+    npm install
+    ```
+
+3. Start the server:
+
+    ```bash
+    npm start
+    ```
+
+    The Node.js backend will be accessible at [http://localhost:5000](http://localhost:5000) (or the port specified in your configuration).
+
+### Backend (FastAPI)
+
+1. Navigate to the `backend-fastapi` directory:
+
+    ```bash
+    cd backend-fastapi
+    ```
+
+2. Set up a virtual environment (optional but recommended):
+
+    ```bash
+    python -m venv venv
+    ```
+
+    Activate the virtual environment:
+    - On Windows:
+
+        ```bash
+        venv\Scripts\activate
+        ```
+
+    - On macOS/Linux:
+
+        ```bash
+        source venv/bin/activate
+        ```
+
+3. Install the dependencies:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    If you are using Poetry, you can install the dependencies with:
+
+    ```bash
+    poetry install
+    ```
+
+4. Start the FastAPI server:
+
+    ```bash
+    uvicorn main:app --reload
+    ```
+
+    The FastAPI server will be accessible at [http://localhost:8000](http://localhost:8000).
+
+## Environment Variables
+
+- You may need to configure environment variables for the servers. Create a `.env` file in each server directory with the necessary environment variables. 
+- You can take help from `.env.example` file.

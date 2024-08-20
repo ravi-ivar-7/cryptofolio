@@ -5,12 +5,8 @@ const generateToken = (data) => {
             data:data,
             issuedAt: Date.now()
         };
-
-        const options = {
-            expiresIn: process.env.EXPIRES_IN || '90'
-        };
         
-        const token = jwt.sign(payload, process.env.SECRET_KEY, options);
+        const token = jwt.sign(payload, process.env.SECRET_KEY);
         
         return token
     } catch (err) {

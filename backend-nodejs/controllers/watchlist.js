@@ -2,9 +2,10 @@ require('dotenv').config({ path: '../../../.env' });
 const { MongoClient } = require('mongodb');
 
 const addToWatchlist = async (req, res) => {
+    console.log('wal')
     const client = new MongoClient(process.env.MONGODB_URL);
-    const { user, coin } = req.body; 
-
+    const { user, coin } = req.body;
+    console.log(coin)
     try {
         if (!user || !coin) {
             return res.status(400).json({ warn: "User and coin are required" });
@@ -17,7 +18,7 @@ const addToWatchlist = async (req, res) => {
         const result = await watchlistCollection.updateOne(
             { email: user.email },
             { $addToSet: { coins: coin } }, // `coins` array stores each added coin
-            { upsert: true } 
+            { upsert: true }
         );
 
         if (result.matchedCount > 0 || result.upsertedCount > 0) {
@@ -50,7 +51,7 @@ const removeFromWatchlist = async (req, res) => {
             { email: user.email },
             { $pull: { coins: { id: coinId } } } // Use `$pull` to remove the specific coin by its `id`
         );
-        
+
 
         if (result.modifiedCount > 0) {
             return res.status(200).json({ info: "Coin removed from watchlist successfully" });
@@ -68,7 +69,7 @@ const removeFromWatchlist = async (req, res) => {
 const getWatchList = async (req, res) => {
     const client = new MongoClient(process.env.MONGODB_URL);
     try {
-        const { email,name } = req.data.data;
+        const { email, name } = req.data.data;
         await client.connect();
         const db = client.db("controlia");
         const watchlistCollection = db.collection('cryptofolioWatchlist');
@@ -86,4 +87,4 @@ const getWatchList = async (req, res) => {
 };
 
 
-module.exports = { addToWatchlist, removeFromWatchlist ,getWatchList};
+module.exports = { addToWatchlist, removeFromWatchlist, getWatchList };

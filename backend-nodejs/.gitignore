@@ -4,3 +4,4 @@ privateKey.pem
 .vscode
 key.pem
 server.crt
+.vercel
