@@ -167,3 +167,29 @@ Make sure you have the following installed on your machine:
 
 - You may need to configure environment variables for the servers. Create a `.env` file in each server directory with the necessary environment variables. 
 - You can take help from `.env.example` file.
+
+
+## Running the Application with Docker
+
+To run the Cryptofolio application using Docker and Docker Compose, follow these steps:
+
+### Prerequisites
+
+Make sure you have Docker and Docker Compose installed on your machine. You can download and install Docker from [Docker's official website](https://www.docker.com/get-started).
+
+### Setting Up Docker
+
+1. **Clone the Repository**
+
+   If you haven’t already cloned the repository, do so by running:
+
+   ```bash
+   git clone https://github.com/ravi-ivar-7/cryptofolio.git
+   cd cryptofolio
+
+2. **After making .env file for each server**
+- Run following command in root directory(cryptofolio):
+`docker-compose up --build`
+
+3. **To stop the containers**
+- Run `docker-compose down`

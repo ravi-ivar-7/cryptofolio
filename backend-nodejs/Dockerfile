@@ -1,14 +1,19 @@
-
+# Use the official Node.js image as a base image
 FROM node:21
 
-WORKDIR /app/controlia
+# Set the working directory in the container
+WORKDIR /app
 
-COPY package*.json ./
+# Copy package.json and package-lock.json
+COPY backend-nodejs/package*.json ./
 
+# Install dependencies
 RUN npm install
 
-COPY . .
+# Copy the rest of the application code
+COPY backend-nodejs/ .
 
-EXPOSE 3002
+EXPOSE 3001
 
+# Start the Node.js server
 CMD ["npm", "start"]
