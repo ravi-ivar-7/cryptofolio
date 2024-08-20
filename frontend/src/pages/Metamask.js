@@ -3,8 +3,8 @@ import { ethers } from "ethers";
 import { Store } from 'react-notifications-component';
 import 'react-notifications-component/dist/theme.css';
 import 'animate.css';
-import TokenHistory from '../services/tokenHistory.js';
 import { PriceChart, ForecastChart } from '../components/chart.js'
+import Authenticate from './Authenticate.js'
 
 const ETHERSCAN_APIKEYS = process.env.REACT_APP_ETHERSCAN_APIKEYS
 const ETHERSCAN_BASEURL = process.env.REACT_APP_ETHERSCAN_BASEURL
@@ -31,23 +31,35 @@ const MetaMaskComponent = () => {
     const [manualAddress, setManualAddress] = useState('');
     const [manualConnected, setManualConnected] = useState(false);
     const [metaMaskConnected, setMetaMaskConnected] = useState(false);
-    const [marketPriceHistory, setMarketPriceHistory] = useState(null);
     const [balanceChartValues, setBalanceChartValues] = useState(null);
-    // useEffect(() => {
-    //     const savedWalletAddress = localStorage.getItem('address');
-    //     const savedBalance = localStorage.getItem('balance');
-    //     const savedTransactionHash = localStorage.getItem('transactionHash');
 
-    //     if (savedWalletAddress) setWalletAddress(savedWalletAddress);
-    //     if (savedBalance) setBalance(savedBalance);
-    //     if (savedTransactionHash) setTransactionHash(savedTransactionHash);
-    // }, []);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [user, setUser] = useState()
 
-    // useEffect(() => {
-    //     localStorage.setItem('walletAddress', walletAddress);
-    //     localStorage.setItem('balance', balance);
-    //     localStorage.setItem('transactionHash', transactionHash);
-    // }, []);
+    useEffect(() => {
+        const cryptofolioUserName= localStorage.getItem('cryptofolioUserName');
+        const cryptofolioUserEmail = localStorage.getItem('cryptofolioUserEmail');
+        const cryptofolioToken = localStorage.getItem('cryptofolioToken');
+        if ( !cryptofolioUserName || !cryptofolioUserEmail || !cryptofolioToken) {
+            localStorage.removeItem('cryptofolioToken')
+            localStorage.removeItem('cryptofolioUser')
+            setIsAuthenticated(false)
+        }
+        else {
+            setUser({email: cryptofolioUserEmail, name: cryptofolioUserName})
+            setIsAuthenticated(!!cryptofolioToken && !!cryptofolioUserName && !!cryptofolioUserEmail);
+        }
+
+    }, []);
+
+    const handleLoginSuccess = (user, token) => {
+        localStorage.setItem('cryptofolioUserEmail', user.email);
+        localStorage.setItem('cryptofolioUserName', user.name);
+        localStorage.setItem('cryptofolioToken', token);
+        setUser({email: user.email, name: user.name})
+        setIsAuthenticated(true);
+    };
+    console.log(user)
 
     const showNotification = (title, message, type) => {
         Store.addNotification({
@@ -202,13 +214,15 @@ const MetaMaskComponent = () => {
     const [coinDetails, setCoinDetails] = useState(null);
     const [showCoinDetails, setShowCoinDetails] = useState(false)
     const [coinDetailsLoading, setCoinDetailsLoading] = useState(false)
+    const [marketPriceHistory, setMarketPriceHistory] = useState(null);
 
     const [displayFutureTrends, setDisplayFutureTrends] = useState(false);
     const [futureTrendLoading, setFutureTrendLoading] = useState(false);
     const [selectedOptions, setSelectedOptions] = useState([]);
     const [forecastDataMap, setForecastDataMap] = useState({});
-    const futureOptions = ['exponential_smoothing', 'arima', 'prophet', 'random_forest'];
+    const [coinIdForAnalysis, setCoinIdForAnalysis] = useState('');
 
+    const futureOptions = ['exponential_smoothing', 'arima', 'prophet', 'random_forest'];
 
     useEffect(() => {
         const fetchCoinList = async () => {
@@ -241,12 +255,30 @@ const MetaMaskComponent = () => {
     }, [searchQuery, coinList]);
     const addToWatchList = (coin) => {
         if (!coin) return;
-        console.log(coin)
         setWatchList(prevWatchList => [...prevWatchList, coin]);
     };
     const handleRemoveCoin = (coinId) => {
+
+
+
         setWatchList(watchList.filter(coin => coin.id !== coinId));
     };
+
+    const hanldeCoinIdForAnalysis = async (coinId) => {
+        setCoinIdForAnalysis(coinId)
+        setForecastDataMap([]);
+        setShowHistoricalChart(false)
+        setCoinDetails(null)
+        setMarketPriceHistory(null)
+        setDisplayFutureTrends(false)
+        setShowCoinDetails(false)
+        setSelectedOptions([])
+        setShowDateInputs(false)
+        setStartDate(null)
+        setEndDate(null)
+
+    }
+
     const handleCoinDetails = async (coinId) => {
         if (!(manualConnected || metaMaskConnected)) {
             showNotification('Error', `Connect to your account to fetch details of coin ${coinId}.`, 'danger');
@@ -409,14 +441,20 @@ const MetaMaskComponent = () => {
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-            <h2 style={{ textAlign: 'center', color: '#333' }}>MetaMask Interaction</h2>
+            <h2 style={{ textAlign: 'center', color: '#333' }}>Cryptofolio</h2>
+            {isAuthenticated ? (
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#444' }}>
+                    <h3>Welcome, {user.name}!</h3>
+                    <p>Email: {user.email}</p>
+                </div>
+            ) : null}
 
             <div style={{
                 margin: '20px auto',
                 padding: '20px',
                 boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
                 borderRadius: '10px',
-                backgroundColor: '#fff',
+                backgroundColor: '#e8f5e9',
                 border: '1px solid #ccc',
                 textAlign: 'center'
             }}>
@@ -497,7 +535,7 @@ const MetaMaskComponent = () => {
                 padding: '20px',
                 boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)',
                 borderRadius: '10px',
-                backgroundColor: '#fff',
+                backgroundColor: '#e3f2fd',
                 border: '1px solid #ccc',
                 textAlign: 'center'
             }}>
@@ -542,253 +580,321 @@ const MetaMaskComponent = () => {
                 </button>
             </div>
 
-
-
-            <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginTop: '30px' }}>
-                <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>
-                    Coin Watchlist
-                </h2>
-
+            {isAuthenticated ? (
                 <div>
-                    {coinList.length ? (
+                    <div style={{ padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '10px', marginTop: '30px' }}>
+                        <h2 style={{ color: '#333', borderBottom: '2px solid #007bff', paddingBottom: '10px', marginBottom: '20px' }}>
+                            Coin Watchlist
+                        </h2>
+
                         <div>
-                            <div style={{ marginBottom: '20px' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Search for a coin..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', marginBottom: '10px' }}
-                                />
-                                <select
-                                    value={selectedCoinId}
-                                    onChange={(e) => setSelectedCoinId(e.target.value)}
-                                    style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px' }}
-                                >
-                                    <option value="">Select a coin</option>
-                                    {filteredCoins.map((coin) => (
-                                        <option key={coin.id} value={coin.id}>
-                                            {coin.name} ({coin.symbol})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <button
-                                disabled={!selectedCoinId}
-                                onClick={() => {
-                                    const selectedCoin = coinList.find(coin => coin.id === selectedCoinId);
-                                    addToWatchList(selectedCoin);
-                                }}
-                                style={{ padding: '10px 20px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
-                            >
-                                Add to Watchlist
-                            </button>
-                        </div>
-                    ) : 'Please wait while we load the coin list...'}
-                </div>
-
-                <div style={{ marginTop: '20px' }}>
-                    <h3>Your Watchlist:</h3>
-                    <ul style={{ listStyleType: 'none', padding: 0 }}>
-                        {watchList.map((coin) => (
-                            <li
-                                key={coin.id}
-                                style={{
-                                    marginBottom: '10px',
-                                    padding: '10px',
-                                    backgroundColor: '#fff',
-                                    borderRadius: '5px',
-                                    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '10px'
-                                }}
-                            >
-                                <div style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    width: '100%',
-                                    padding: '10px',
-                                    boxSizing: 'border-box'
-                                }}>
-                                    <div style={{ flex: 1, textAlign: 'left' }}>
-                                        <strong>ID:</strong> {coin.id}
-                                    </div>
-                                    <div style={{ flex: 2, textAlign: 'center' }}>
-                                        <strong>Name:</strong> {coin.name}
-                                    </div>
-                                    <div style={{ flex: 1, textAlign: 'right' }}>
-                                        <strong>Symbol:</strong> {coin.symbol}
-                                    </div>
-                                </div>
-
-                                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
-                                    <button
-                                        onClick={() => handleRemoveCoin(coin.id)}
-                                        style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: '#dc3545',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: '5px',
-                                            cursor: 'pointer',
-                                            flex: 1
-                                        }}
-                                    >
-                                        Remove
-                                    </button>
-
-                                    <button
-                                        onClick={() => {
-                                            if (showDateInputs) {
-                                                setShowHistoricalChart(false);
-                                            }
-                                            setShowDateInputs(!showDateInputs);
-                                        }}
-                                        style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: '#007bff',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: '5px',
-                                            cursor: 'pointer',
-                                            flex: 1
-                                        }}
-                                    >
-                                        {showDateInputs ? 'Hide Historical Data Chart' : 'Show Historical Data Chart'}
-                                    </button>
-
-
-                                    <button disabled={coinDetailsLoading}
-                                        onClick={() => {
-                                            if (!showCoinDetails) {
-                                                handleCoinDetails(coin.id);
-                                            }
-                                            setShowCoinDetails(!showCoinDetails);
-                                        }}
-                                        style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: '#17a2b8',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: '5px',
-                                            cursor: 'pointer',
-                                            flex: 1
-                                        }}
-                                    >
-                                        {showCoinDetails ? 'Hide Coin Details' : 'Show Coin Details'}
-                                    </button>
-
-                                    <button
-                                        onClick={() => setDisplayFutureTrends(!displayFutureTrends)}
-                                        style={{
-                                            padding: '5px 10px',
-                                            backgroundColor: '#28a745',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: '5px',
-                                            cursor: 'pointer',
-                                            flex: 1,
-                                        }}
-                                    >
-                                        {displayFutureTrends ? 'Hide Future Trends' : 'Show Future Trends'}
-                                    </button>
-                                </div>
-
-                                {displayFutureTrends && (
-                                    <div>
-                                        {futureOptions.map((option) => (
-                                            <div key={option}>
-                                                <label>
-                                                    <input
-                                                        type="checkbox"
-                                                        value={option}
-                                                        onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                                setSelectedOptions([...selectedOptions, option]);
-                                                            } else {
-                                                                setSelectedOptions(selectedOptions.filter((o) => o !== option));
-                                                            }
-                                                        }}
-                                                    />
-                                                    {option.replace('_', ' ')}
-                                                </label>
-                                            </div>
-                                        ))}
-
-                                        <button
-                                            onClick={() => handleFutureTrendOptions(selectedOptions, coin)}
-                                            style={{
-                                                padding: '5px 10px',
-                                                backgroundColor: '#28a745',
-                                                color: '#fff',
-                                                border: 'none',
-                                                borderRadius: '5px',
-                                                cursor: 'pointer',
-                                                flex: 1,
-                                                marginTop: '10px',
-                                            }}
-                                            disabled={selectedOptions.length === 0 || futureTrendLoading}
+                            {coinList.length ? (
+                                <div>
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <input
+                                            type="text"
+                                            placeholder="Search for a coin..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', marginBottom: '10px' }}
+                                        />
+                                        <select
+                                            value={selectedCoinId}
+                                            onChange={(e) => setSelectedCoinId(e.target.value)}
+                                            style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px' }}
                                         >
-                                            {futureTrendLoading ? 'Analyzing...' : 'Start Analysis (This might take some time)'}
-                                        </button>
+                                            <option value="">Select a coin</option>
+                                            {filteredCoins.map((coin) => (
+                                                <option key={coin.id} value={coin.id}>
+                                                    {coin.name} ({coin.symbol})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
 
+                                    <button
+                                        disabled={!selectedCoinId}
+                                        onClick={() => {
+                                            const selectedCoin = coinList.find(coin => coin.id === selectedCoinId);
+                                            addToWatchList(selectedCoin);
+                                        }}
+                                        style={{ padding: '10px 20px', backgroundColor: '#28a745', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}
+                                    >
+                                        Add to Watchlist
+                                    </button>
+                                </div>
+                            ) : 'Please wait while we load the coin list...'}
+                        </div>
 
-                                        <div>
-                                            <h2>Forecast</h2>
-                                            {console.log('Forecast Data Map:', forecastDataMap)}
-                                            {console.log('Number of forecast options:', Object.keys(forecastDataMap).length)}
-
-                                            {Object.keys(forecastDataMap).length === 0 ? (
-                                                <p>No forecast data available.</p>
-                                            ) : (
-                                                Object.keys(forecastDataMap).map((option) => {
-
-                                                    const { xForecast, yForecast } = forecastDataMap[option];
-
-                                                    const chartTitle = `${option} Forecast`;
-
-                                                    return (
-                                                        <ForecastChart
-                                                            key={option}
-                                                            xData={xForecast}
-                                                            yData={yForecast}
-                                                            chartTitle={chartTitle}
-                                                        />
-                                                    );
-                                                })
-                                            )}
+                        <div style={{ marginTop: '20px' }}>
+                            <h3>Your Watchlist:</h3>
+                            <ul style={{ listStyleType: 'none', padding: 0 }}>
+                                {watchList.map((coin) => (
+                                    <li
+                                        key={coin.id}
+                                        style={{
+                                            marginBottom: '10px',
+                                            padding: '10px',
+                                            backgroundColor: '#fff',
+                                            borderRadius: '5px',
+                                            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '10px'
+                                        }}
+                                    >
+                                        <div style={{
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            width: '100%',
+                                            padding: '10px',
+                                            boxSizing: 'border-box',
+                                            gap: '10px'
+                                        }}>
+                                            <div style={{ flex: 1 }}>
+                                                <strong>ID:</strong> {coin.id}
+                                            </div>
+                                            <div style={{ flex: 2 }}>
+                                                <strong>Name:</strong> {coin.name}
+                                            </div>
+                                            <div style={{ flex: 1 }}>
+                                                <strong>Symbol:</strong> {coin.symbol}
+                                            </div>
+                                            <button
+                                                onClick={() => handleRemoveCoin(coin.id)}
+                                                style={{
+                                                    padding: '5px 10px',
+                                                    backgroundColor: '#dc3545',
+                                                    color: '#fff',
+                                                    border: 'none',
+                                                    borderRadius: '5px',
+                                                    cursor: 'pointer',
+                                                    flexShrink: 0
+                                                }}
+                                            >
+                                                Remove
+                                            </button>
                                         </div>
 
+                                        {/* coin specific area */}
+                                        {coinIdForAnalysis === coin.id ? (
+                                            <div>
+                                                <div style={{ display: 'flex', gap: '10px', width: '100%' }}>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (showDateInputs) {
+                                                                setShowHistoricalChart(false);
+                                                            }
+                                                            setShowDateInputs(!showDateInputs);
+                                                        }}
+                                                        style={{
+                                                            padding: '5px 10px',
+                                                            backgroundColor: '#007bff',
+                                                            color: '#fff',
+                                                            border: 'none',
+                                                            borderRadius: '5px',
+                                                            cursor: 'pointer',
+                                                            flex: 1
+                                                        }}
+                                                    >
+                                                        {showDateInputs ? 'Hide Historical Data Chart' : 'Show Historical Data Chart'}
+                                                    </button>
 
 
-                                    </div>
-                                )}
+                                                    <button disabled={coinDetailsLoading}
+                                                        onClick={() => {
+                                                            if (!showCoinDetails) {
+                                                                handleCoinDetails(coin.id);
+                                                            }
+                                                            setShowCoinDetails(!showCoinDetails);
+                                                        }}
+                                                        style={{
+                                                            padding: '5px 10px',
+                                                            backgroundColor: '#17a2b8',
+                                                            color: '#fff',
+                                                            border: 'none',
+                                                            borderRadius: '5px',
+                                                            cursor: 'pointer',
+                                                            flex: 1
+                                                        }}
+                                                    >
+                                                        {showCoinDetails ? 'Hide Coin Details' : 'Show Coin Details'}
+                                                    </button>
+
+                                                    <button
+                                                        disabled={futureTrendLoading}
+                                                        onClick={() => setDisplayFutureTrends(!displayFutureTrends)}
+                                                        style={{
+                                                            padding: '5px 10px',
+                                                            backgroundColor: '#28a745',
+                                                            color: '#fff',
+                                                            border: 'none',
+                                                            borderRadius: '5px',
+                                                            cursor: 'pointer',
+                                                            flex: 1,
+                                                        }}
+                                                    >
+                                                        {displayFutureTrends ? 'Hide Future Trends' : 'Show Future Trends'}
+                                                    </button>
+                                                </div>
 
 
-                                {showDateInputs && (
-                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
-                                        <label>
-                                            Start Date:
-                                            <input
-                                                type="date"
-                                                onChange={(e) => setStartDate(e.target.value)}
-                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
-                                            />
-                                        </label>
-                                        <label>
-                                            End Date:
-                                            <input
-                                                type="date"
-                                                onChange={(e) => setEndDate(e.target.value)}
-                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
-                                            />
-                                        </label>
-                                        <button
+
+                                                {displayFutureTrends && (
+                                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+                                                        {futureOptions.map((option) => (
+                                                            <div key={option}>
+                                                                <label>
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        value={option}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) {
+                                                                                setSelectedOptions([...selectedOptions, option]);
+                                                                            } else {
+                                                                                setSelectedOptions(selectedOptions.filter((o) => o !== option));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                    {option.replace('_', ' ')}
+                                                                </label>
+                                                            </div>
+                                                        ))}
+
+                                                        <button
+                                                            onClick={() => handleFutureTrendOptions(selectedOptions, coin)}
+                                                            style={{
+                                                                padding: '5px 10px',
+                                                                backgroundColor: '#28a745',
+                                                                color: '#fff',
+                                                                border: 'none',
+                                                                borderRadius: '5px',
+                                                                cursor: 'pointer',
+                                                                flex: 1,
+                                                                marginTop: '10px',
+                                                            }}
+                                                            disabled={selectedOptions.length === 0 || futureTrendLoading}
+                                                        >
+                                                            {futureTrendLoading ? 'Analyzing...' : 'Start Analysis (This might take some time)'}
+                                                        </button>
+
+
+                                                        <div>
+                                                            <h2>Forecast</h2>
+
+                                                            {Object.keys(forecastDataMap).length === 0 ? (
+                                                                <p>No forecast data available.</p>
+                                                            ) : (
+                                                                Object.keys(forecastDataMap).map((option) => {
+
+                                                                    const { xForecast, yForecast } = forecastDataMap[option];
+
+                                                                    const chartTitle = `${option} Forecast`;
+
+                                                                    return (
+                                                                        <ForecastChart
+                                                                            key={option}
+                                                                            xData={xForecast}
+                                                                            yData={yForecast}
+                                                                            chartTitle={chartTitle}
+                                                                        />
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </div>
+
+
+
+                                                    </div>
+                                                )}
+
+
+                                                {showDateInputs && (
+                                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+                                                        <label>
+                                                            Start Date:
+                                                            <input
+                                                                type="date"
+                                                                onChange={(e) => setStartDate(e.target.value)}
+                                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
+                                                            />
+                                                        </label>
+                                                        <label>
+                                                            End Date:
+                                                            <input
+                                                                type="date"
+                                                                onChange={(e) => setEndDate(e.target.value)}
+                                                                style={{ padding: '10px', borderRadius: '5px', border: '1px solid #ccc', width: '200px', margin: '10px' }}
+                                                            />
+                                                        </label>
+                                                        <button
+                                                            onClick={() => {
+                                                                handleHistoricalCoinDataChart(coin.id, startDate, endDate);
+                                                            }}
+                                                            style={{
+                                                                margin: '10px',
+                                                                padding: '5px',
+                                                                backgroundColor: '#007bff',
+                                                                color: '#fff',
+                                                                border: 'none',
+                                                                borderRadius: '5px',
+                                                                cursor: 'pointer',
+                                                                flex: 1
+                                                            }}
+                                                        >
+                                                            Show Chart
+                                                        </button>
+                                                        {showHistoricalChart && (
+                                                            <div style={{ marginTop: '20px', width: '100%' }}>
+                                                                {marketPriceHistory ? (
+                                                                    (() => {  // Immediately Invoked Function Expression (IIFE) to handle logic inside JSX
+                                                                        const days = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+                                                                        const adjustedDays = days === 0 ? 30 : days;
+                                                                        return (
+                                                                            <PriceChart
+                                                                                xData={marketPriceHistory[0]}
+                                                                                yData={marketPriceHistory[1]}
+                                                                                chartTitle={`${adjustedDays} days price variations`}
+                                                                            />
+                                                                        );
+                                                                    })()
+                                                                ) : 'Loading chart...'}
+                                                            </div>
+
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                {coinDetailsLoading ? ('Loading coin balance and other details...') : (
+                                                    <div>
+                                                        {coinDetails && showCoinDetails && (
+                                                            <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+
+
+                                                                <h1><strong>Name:</strong>{coinDetails.name}</h1>
+                                                                <img
+                                                                    src={coinDetails.image}
+                                                                    alt={`${coinDetails.name} logo`}
+                                                                    style={{ width: '100px', height: '100px', borderRadius: '10px' }}
+                                                                />
+                                                                <h2><strong>Symbol:</strong>{coinDetails.symbol}</h2>
+                                                                <p><strong>Description:</strong> {coinDetails.description}</p>
+                                                                <p><strong>Platform:</strong> {coinDetails.platform}</p>
+                                                                <p><strong>Contract Address:</strong> {coinDetails.contractAddress}</p>
+                                                                <p><strong>Balance:</strong> {coinDetails.balance}</p>
+                                                                <p><strong>Homepage:</strong> <a href={coinDetails.homepage} target="_blank" rel="noopener noreferrer">{coinDetails.homepage}</a></p>
+                                                                <p><strong>Whitepaper:</strong> <a href={coinDetails.whitepaper} target="_blank" rel="noopener noreferrer">{coinDetails.whitepaper}</a></p>
+                                                                <p><strong>Blockchain Site:</strong> <a href={coinDetails.blockchainSite} target="_blank" rel="noopener noreferrer">{coinDetails.blockchainSite}</a></p>
+                                                            </div>
+                                                        )}
+
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ) : <button
                                             onClick={() => {
-                                                handleHistoricalCoinDataChart(coin.id, startDate, endDate);
+                                                hanldeCoinIdForAnalysis(coin.id)
                                             }}
                                             style={{
                                                 margin: '10px',
@@ -801,53 +907,20 @@ const MetaMaskComponent = () => {
                                                 flex: 1
                                             }}
                                         >
-                                            Show Chart
-                                        </button>
-                                        {showHistoricalChart && (
-                                            <div style={{ marginTop: '20px', width: '100%' }}>
-                                                {marketPriceHistory ? (
-                                                    <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} chartTitle={`${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days price variations`} />
-                                                ) : 'Loading chart...'}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-
-                                {coinDetailsLoading ? ('Loading coin balance and other details...') : (
-                                    <div>
-                                        {coinDetails && showCoinDetails && (
-                                            <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+                                            Click here for {coin.name}  analysis
+                                        </button>}
 
 
-                                                <h1><strong>Name:</strong>{coinDetails.name}</h1>
-                                                <img
-                                                    src={coinDetails.image}
-                                                    alt={`${coinDetails.name} logo`}
-                                                    style={{ width: '100px', height: '100px', borderRadius: '10px' }}
-                                                />
-                                                <h2><strong>Symbol:</strong>{coinDetails.symbol}</h2>
-                                                <p><strong>Description:</strong> {coinDetails.description}</p>
-                                                <p><strong>Platform:</strong> {coinDetails.platform}</p>
-                                                <p><strong>Contract Address:</strong> {coinDetails.contractAddress}</p>
-                                                <p><strong>Balance:</strong> {coinDetails.balance}</p>
-                                                <p><strong>Homepage:</strong> <a href={coinDetails.homepage} target="_blank" rel="noopener noreferrer">{coinDetails.homepage}</a></p>
-                                                <p><strong>Whitepaper:</strong> <a href={coinDetails.whitepaper} target="_blank" rel="noopener noreferrer">{coinDetails.whitepaper}</a></p>
-                                                <p><strong>Blockchain Site:</strong> <a href={coinDetails.blockchainSite} target="_blank" rel="noopener noreferrer">{coinDetails.blockchainSite}</a></p>
-                                            </div>
-                                        )}
-
-                                    </div>
-                                )}
-
-
-
-                            </li>
-                        ))}
-                    </ul>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-
+            ) : (
+                <Authenticate onLoginSuccess={handleLoginSuccess} />
+            )}
 
 
         </div>
