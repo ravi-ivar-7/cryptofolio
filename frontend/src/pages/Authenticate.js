@@ -7,10 +7,11 @@ const Authenticate = ({ onLoginSuccess }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
+    const [isAuthenticating, setIsAuthentication] = useState(false)
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
+        setIsAuthentication(true)
         try {
             const response = await fetch(`${NODEJS_BASEURL}/authenticate`, {
                 method: 'POST',
@@ -31,6 +32,9 @@ const Authenticate = ({ onLoginSuccess }) => {
         } catch (error) {
             console.log(error)
             setError('An error occurred during authentication.');
+        }
+        finally{
+            setIsAuthentication(false)
         }
     };
 
@@ -101,7 +105,7 @@ const Authenticate = ({ onLoginSuccess }) => {
                         }}
                     />
                 </div>
-                <button type="submit" style={{
+                <button disabled={isAuthenticating} type="submit" style={{
                     width: '100%',
                     padding: '0.75rem',
                     backgroundColor: '#007bff',
