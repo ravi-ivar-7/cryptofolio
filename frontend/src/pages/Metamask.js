@@ -6,13 +6,15 @@ import 'animate.css';
 import TokenHistory from '../services/tokenHistory.js';
 import { PriceChart, ForecastChart } from '../components/chart.js'
 
-const apiKey = 'KBSTDXJY5Q7X1A9Q9YGIFR4NNHNSR8GQJE';
-const baseUrl = 'https://api-sepolia.etherscan.io/api';
+const ETHERSCAN_APIKEYS = process.env.REACT_APP_ETHERSCAN_APIKEYS
+const ETHERSCAN_BASEURL = process.env.REACT_APP_ETHERSCAN_BASEURL
 
-const DEFAULT_NETWORK = 'sepolia'
-const FASTAPI_BASE_URL = 'http://localhost:8000'
-const NODEJS_BASE_URL = ''
-const GC_KEY = ''
+const DEFAULT_NETWORK = process.env.REACT_APP_DEFAULT_NETWORK
+
+const FASTAPI_BASEURL = process.env.REACT_APP_FASTAPI_BASEURL
+const NODEJS_BASEURL = process.env.REACT_APP_NODEJS_BASEURL
+
+const COINGECKO_APIKEYS = process.env.REACT_APP_COINGECKO_APIKEYS
 
 const TOKEN_ABI = [
     "function balanceOf(address account) view returns (uint256)",
@@ -25,16 +27,10 @@ const MetaMaskComponent = () => {
     const [provider, setProvider] = useState(null);
     const [signer, setSigner] = useState(null);
     const [balance, setBalance] = useState(null);
-    const [transactionHash, setTransactionHash] = useState('');
     const [walletAddress, setWalletAddress] = useState('');
     const [manualAddress, setManualAddress] = useState('');
     const [manualConnected, setManualConnected] = useState(false);
     const [metaMaskConnected, setMetaMaskConnected] = useState(false);
-    // const [startDate, setStartDate] = useState(new Date);
-    const [watchlist, setWatchlist] = useState([]);
-    const [newTokenAddress, setNewTokenAddress] = useState('');
-    const [tokenData, setTokenData] = useState({});
-
     const [marketPriceHistory, setMarketPriceHistory] = useState(null);
     const [balanceChartValues, setBalanceChartValues] = useState(null);
     // useEffect(() => {
@@ -69,7 +65,7 @@ const MetaMaskComponent = () => {
         });
     };
 
-    const getInitialBalance = async (address, blockNumber, provider, showNotification) => {
+    const getInitialBalance = async (address, blockNumber, provider) => {
         try {
             const balance = await provider.getBalance(address, ethers.toBigInt(blockNumber));
             return ethers.formatEther(balance);
@@ -79,36 +75,35 @@ const MetaMaskComponent = () => {
         }
     };
 
-    const calculateHistoricalBalance = async (address, transactions, provider, showNotification, setBalanceChartValues) => {
+    const calculateHistoricalBalance = async (address, transactions, provider) => {
         try {
-            const initialBalance = await getInitialBalance(address, transactions[0].blockNumber, provider, showNotification);
+            const initialBalance = await getInitialBalance(address, transactions[0].blockNumber, provider);
             let balance = ethers.parseEther(initialBalance);
             const balanceHistory = [{ timestamp: transactions[0].timeStamp, balance: initialBalance }];
-
             for (let i = 1; i < transactions.length; i++) {
                 const tx = transactions[i];
                 const value = ethers.parseEther(ethers.formatEther(tx.value));
                 if (tx.to.toLowerCase() === address.toLowerCase()) {
-                    balance = balance.add(value); // Inbound transaction
+                    balance = balance + value// Inbound transaction
                 }
                 if (tx.from.toLowerCase() === address.toLowerCase()) {
-                    balance = balance.sub(value); // Outbound transaction
-                    balance = balance.sub(ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed))); // Deduct gas fees
+                    balance = balance - (value); // Outbound transaction
+                    balance = balance - (ethers.parseEther(ethers.formatEther(tx.gasPrice * tx.gasUsed))); // Deduct gas fees
                 }
                 balanceHistory.push({ timestamp: tx.timeStamp, balance: ethers.formatEther(balance) });
             }
-
             const xValue = balanceHistory.map(item => new Date(item.timestamp * 1000)); // Convert to Date object
             const yValue = balanceHistory.map(item => parseFloat(item.balance)); // Convert balance to float
             setBalanceChartValues([xValue, yValue]);
         } catch (error) {
+            console.log(error)
             showNotification('Error', 'Failed to calculate historical balance', 'danger');
         }
     };
 
     const getTransactionHistory = async (address) => { // and from this transation list, we will calculate balace over time of user account
         if (address) {
-            const url = `${baseUrl}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${apiKey}`;
+            const url = `${ETHERSCAN_BASEURL}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${ETHERSCAN_APIKEYS}`;
             const response = await fetch(url);
             const data = await response.json();
             console.log('data', data)
@@ -153,7 +148,7 @@ const MetaMaskComponent = () => {
                 showNotification("Error", "Invalid Ethereum address. Please check and try again.", "danger");
             }
         } catch (error) {
-            showNotification('Error', `Failed to connect manually. \n${error.code}`, 'danger');
+            showNotification('Error', `Failed to connect manually.`, 'danger');
         }
     };
     const connectToMetaMask = async () => {
@@ -166,12 +161,13 @@ const MetaMaskComponent = () => {
                 setProvider(newProvider);
                 setSigner(newSigner);
                 setWalletAddress(walletAddress);
-                showNotification('Success', `Connected address: ${walletAddress}`, 'success');
                 setMetaMaskConnected(true)
                 const transactionList = await getTransactionHistory(walletAddress);
                 await calculateHistoricalBalance(walletAddress, transactionList, newProvider)
+                console.log(balanceChartValues, 'balance chart vlaues')
+                showNotification('Success', `Connected address: ${walletAddress}`, 'success');
             } catch (error) {
-                showNotification('Error', `User denied account access. \n${error.code}`, 'danger');
+                showNotification('Error', `User denied account access.`, 'danger');
                 console.error('User denied account access', error);
             }
         } else {
@@ -185,7 +181,6 @@ const MetaMaskComponent = () => {
         const tx = { to: toAddress, value: ethers.parseEther(amountInEther), };
         try {
             const transactionResponse = await signer.sendTransaction(tx);
-            setTransactionHash(transactionResponse.hash);
             showNotification('Info', `Transaction Hash: ${transactionResponse.hash}`, 'info');
             await transactionResponse.wait();
             showNotification('Success', 'Transaction Mined', 'success');
@@ -274,16 +269,13 @@ const MetaMaskComponent = () => {
 
             // Fetch the first platform's details
             const firstPlatform = Object.keys(detailPlatforms)[0];
-            const contractAddress = detailPlatforms[firstPlatform]?.contract_address;
+            const contractAddress = await detailPlatforms[firstPlatform]?.contract_address
+            const decimals = await detailPlatforms[firstPlatform]?.decimal_place
 
-            if (!contractAddress) {
-                throw new Error('Contract address not found');
+            if (!contractAddress || !decimals) {
+                throw new Error('Contract address or decimals not found');
             }
-
             const tokenContract = new ethers.Contract(contractAddress, TOKEN_ABI, provider);
-            const [decimals] = await Promise.all([
-                tokenContract.decimals()
-            ]);
 
             // Fetch the balance
             const balance = await tokenContract.balanceOf(walletAddress);
@@ -302,8 +294,6 @@ const MetaMaskComponent = () => {
                 whitepaper: coinInfo.links.whitepaper,
                 blockchainSite: coinInfo.links.blockchain_site[0] // Taking the first blockchain site link
             };
-
-            console.log('Coin details:', newCoinDetails);
             setCoinDetails(newCoinDetails);
             showNotification('Success', `Data for ${newCoinDetails.symbol} fetched successfully`, 'info');
         } catch (error) {
@@ -352,7 +342,7 @@ const MetaMaskComponent = () => {
         try {
             const options = {
                 method: 'GET',
-                headers: { accept: 'application/json', 'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1' }
+                headers: { accept: 'application/json', 'x-cg-api-key': COINGECKO_APIKEYS }
             };
             const start = startDate ? Math.floor(new Date(startDate).getTime() / 1000) : Math.floor(Date.now() / 1000) - (3 * 2629743); // Default to last 3 months
             const end = endDate ? Math.floor(new Date(endDate).getTime() / 1000) : Math.floor(Date.now() / 1000);
@@ -377,7 +367,7 @@ const MetaMaskComponent = () => {
                 }
 
                 try {
-                    const response = await fetch(`${FASTAPI_BASE_URL}/forecast/${option}`, {
+                    const response = await fetch(`${FASTAPI_BASEURL}/forecast/${option}`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -483,9 +473,6 @@ const MetaMaskComponent = () => {
                     <div style={{ textAlign: 'center', fontSize: '18px', color: '#333' }}>
                         {balance ? <div>Balance: {balance} ETH</div> : null}
                         {walletAddress ? <div>Address: {walletAddress}</div> : null}
-
-
-
                         {balanceChartValues ? (
                             <div style={{
                                 width: '80%',
@@ -496,7 +483,7 @@ const MetaMaskComponent = () => {
                                 borderRadius: '8px',
                                 boxShadow: '0 4px 8px rgba(0, 0, 0, 0.1)'
                             }}>
-                                <PriceChart xData={balanceChartValues[0]} yData={balanceChartValues[1]} />
+                                <PriceChart xData={balanceChartValues[0]} yData={balanceChartValues[1]} chartTitle={'Balance over time.'} />
                             </div>
                         ) : null}
                     </div>
@@ -617,7 +604,7 @@ const MetaMaskComponent = () => {
                                     flexDirection: 'column',
                                     gap: '10px'
                                 }}
-                                >
+                            >
                                 <div style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
@@ -758,7 +745,7 @@ const MetaMaskComponent = () => {
                                                 <p>No forecast data available.</p>
                                             ) : (
                                                 Object.keys(forecastDataMap).map((option) => {
-                                                  
+
                                                     const { xForecast, yForecast } = forecastDataMap[option];
 
                                                     const chartTitle = `${option} Forecast`;
@@ -782,7 +769,7 @@ const MetaMaskComponent = () => {
 
 
                                 {showDateInputs && (
-                                    <div style={{ marginBottom: '20px' }}>
+                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
                                         <label>
                                             Start Date:
                                             <input
@@ -816,33 +803,39 @@ const MetaMaskComponent = () => {
                                         >
                                             Show Chart
                                         </button>
+                                        {showHistoricalChart && (
+                                            <div style={{ marginTop: '20px', width: '100%' }}>
+                                                {marketPriceHistory ? (
+                                                    <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} chartTitle={`${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days price variations`} />
+                                                ) : 'Loading chart...'}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
-                                {showHistoricalChart && (
-                                    <div style={{ marginTop: '20px', width: '100%' }}>
-                                        {marketPriceHistory ? (
-                                            <PriceChart xData={marketPriceHistory[0]} yData={marketPriceHistory[1]} chartTitle={`${Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24))} days price variations`} />
-                                        ) : 'Loading chart...'}
-                                    </div>
-                                )}
+                                {coinDetailsLoading ? ('Loading coin balance and other details...') : (
+                                    <div>
+                                        {coinDetails && showCoinDetails && (
+                                            <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
 
-                                {coinDetails && showCoinDetails && (
-                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
-                                        <h1><strong>Name:</strong>{coinDetails.name}</h1>
-                                        <img
-                                            src={coinDetails.image}
-                                            alt={`${coinDetails.name} logo`}
-                                            style={{ width: '100px', height: '100px', borderRadius: '10px' }}
-                                        />
-                                        <h2><strong>Symbol:</strong>{coinDetails.symbol}</h2>
-                                        <p><strong>Description:</strong> {coinDetails.description}</p>
-                                        <p><strong>Platform:</strong> {coinDetails.platform}</p>
-                                        <p><strong>Contract Address:</strong> {coinDetails.contractAddress}</p>
-                                        <p><strong>Balance:</strong> {coinDetails.balance}</p>
-                                        <p><strong>Homepage:</strong> <a href={coinDetails.homepage} target="_blank" rel="noopener noreferrer">{coinDetails.homepage}</a></p>
-                                        <p><strong>Whitepaper:</strong> <a href={coinDetails.whitepaper} target="_blank" rel="noopener noreferrer">{coinDetails.whitepaper}</a></p>
-                                        <p><strong>Blockchain Site:</strong> <a href={coinDetails.blockchainSite} target="_blank" rel="noopener noreferrer">{coinDetails.blockchainSite}</a></p>
+
+                                                <h1><strong>Name:</strong>{coinDetails.name}</h1>
+                                                <img
+                                                    src={coinDetails.image}
+                                                    alt={`${coinDetails.name} logo`}
+                                                    style={{ width: '100px', height: '100px', borderRadius: '10px' }}
+                                                />
+                                                <h2><strong>Symbol:</strong>{coinDetails.symbol}</h2>
+                                                <p><strong>Description:</strong> {coinDetails.description}</p>
+                                                <p><strong>Platform:</strong> {coinDetails.platform}</p>
+                                                <p><strong>Contract Address:</strong> {coinDetails.contractAddress}</p>
+                                                <p><strong>Balance:</strong> {coinDetails.balance}</p>
+                                                <p><strong>Homepage:</strong> <a href={coinDetails.homepage} target="_blank" rel="noopener noreferrer">{coinDetails.homepage}</a></p>
+                                                <p><strong>Whitepaper:</strong> <a href={coinDetails.whitepaper} target="_blank" rel="noopener noreferrer">{coinDetails.whitepaper}</a></p>
+                                                <p><strong>Blockchain Site:</strong> <a href={coinDetails.blockchainSite} target="_blank" rel="noopener noreferrer">{coinDetails.blockchainSite}</a></p>
+                                            </div>
+                                        )}
+
                                     </div>
                                 )}
 
@@ -853,6 +846,8 @@ const MetaMaskComponent = () => {
                     </ul>
                 </div>
             </div>
+
+
 
 
         </div>
