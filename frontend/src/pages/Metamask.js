@@ -4,12 +4,15 @@ import { Store } from 'react-notifications-component';
 import 'react-notifications-component/dist/theme.css';
 import 'animate.css';
 import TokenHistory from '../services/tokenHistory.js';
-import PriceChart from '../components/chart.js'
+import { PriceChart, ForecastChart } from '../components/chart.js'
 
 const apiKey = 'KBSTDXJY5Q7X1A9Q9YGIFR4NNHNSR8GQJE';
 const baseUrl = 'https://api-sepolia.etherscan.io/api';
 
 const DEFAULT_NETWORK = 'sepolia'
+const FASTAPI_BASE_URL = 'http://localhost:8000'
+const NODEJS_BASE_URL = ''
+const GC_KEY = ''
 
 const TOKEN_ABI = [
     "function balanceOf(address account) view returns (uint256)",
@@ -203,7 +206,13 @@ const MetaMaskComponent = () => {
     const [endDate, setEndDate] = useState(null);
     const [coinDetails, setCoinDetails] = useState(null);
     const [showCoinDetails, setShowCoinDetails] = useState(false)
-    const [coinDetailsLoading, setCoinDetailsLoading]= useState(false)
+    const [coinDetailsLoading, setCoinDetailsLoading] = useState(false)
+
+    const [displayFutureTrends, setDisplayFutureTrends] = useState(false);
+    const [futureTrendLoading, setFutureTrendLoading] = useState(false);
+    const [selectedOptions, setSelectedOptions] = useState([]);
+    const [forecastDataMap, setForecastDataMap] = useState({});
+    const futureOptions = ['exponential_smoothing', 'arima', 'prophet', 'random_forest'];
 
 
     useEffect(() => {
@@ -225,7 +234,6 @@ const MetaMaskComponent = () => {
         };
         fetchCoinList();
     }, []);
-
     useEffect(() => {
         if (coinList) {
             const lowercasedQuery = searchQuery.toLowerCase();
@@ -236,20 +244,18 @@ const MetaMaskComponent = () => {
             setFilteredCoins(filtered);
         }
     }, [searchQuery, coinList]);
-
     const addToWatchList = (coin) => {
         if (!coin) return;
         console.log(coin)
         setWatchList(prevWatchList => [...prevWatchList, coin]);
     };
-
     const handleRemoveCoin = (coinId) => {
         setWatchList(watchList.filter(coin => coin.id !== coinId));
     };
-
     const handleCoinDetails = async (coinId) => {
         if (!(manualConnected || metaMaskConnected)) {
             showNotification('Error', `Connect to your account to fetch details of coin ${coinId}.`, 'danger');
+            setCoinDetails(false)
             return;
         }
         setCoinDetailsLoading(true)
@@ -275,7 +281,7 @@ const MetaMaskComponent = () => {
             }
 
             const tokenContract = new ethers.Contract(contractAddress, TOKEN_ABI, provider);
-            const [ decimals] = await Promise.all([
+            const [decimals] = await Promise.all([
                 tokenContract.decimals()
             ]);
 
@@ -304,17 +310,10 @@ const MetaMaskComponent = () => {
             showNotification('Error', 'Failed to fetch token data', 'danger');
             console.error('Failed to fetch token data', error);
         }
-        finally{
+        finally {
             setCoinDetailsLoading(false)
         }
     };
-
-
-    const handleFutureTrends = (coinId) => {
-        console.log('Show future trends for:', coinId);
-    };
-
-    // Fetch historical price data of watchlist
     const handleHistoricalCoinDataChart = (coinId, startDate, endDate) => {
         if (showDateInputs) {
             // Convert dates to Unix timestamps
@@ -345,6 +344,78 @@ const MetaMaskComponent = () => {
         }
     };
 
+
+    const handleFutureTrendOptions = async (selectedOptions, coin) => {
+        setFutureTrendLoading(true);
+        const updatedForecastDataMap = {};
+        setForecastDataMap({})
+        try {
+            const options = {
+                method: 'GET',
+                headers: { accept: 'application/json', 'x-cg-api-key': 'CG-S2ttSUxQwf3Q1opsge95Zzh1' }
+            };
+            const start = startDate ? Math.floor(new Date(startDate).getTime() / 1000) : Math.floor(Date.now() / 1000) - (3 * 2629743); // Default to last 3 months
+            const end = endDate ? Math.floor(new Date(endDate).getTime() / 1000) : Math.floor(Date.now() / 1000);
+            // Fetch historical price data
+            const dataResponse = await fetch(`https://api.coingecko.com/api/v3/coins/${coin.id}/market_chart/range?vs_currency=usd&from=${start}&to=${end}`, options);
+            if (!dataResponse.ok) {
+                throw new Error('Failed to fetch historical price data');
+            }
+            const data = await dataResponse.json();
+            const xValue = data['prices'].map(elem => new Date(elem[0]));
+            const yValue = data['prices'].map(elem => elem[1]);
+            const priceForTrend = yValue;
+            const prophetData = xValue.map((date, index) => ({ ds: date.toISOString().split('T')[0], y: yValue[index] }));
+
+            for (const option of selectedOptions) {
+                let bodyData;
+
+                if (option === 'prophet') {
+                    bodyData = { data: prophetData };
+                } else {
+                    bodyData = { data: priceForTrend };
+                }
+
+                try {
+                    const response = await fetch(`${FASTAPI_BASE_URL}/forecast/${option}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(bodyData),
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Failed to analyze trend using ${option}`);
+                    }
+
+                    const result = await response.json();
+
+                    let xForecast, yForecast;
+
+                    if (option === 'prophet') {
+                        xForecast = result.forecast.map(item => item.ds);
+                        yForecast = result.forecast.map(item => item.yhat);
+                    } else {
+                        xForecast = result.forecast.map(item => item.index);
+                        yForecast = result.forecast.map(item => item.forecast);
+                    }
+
+                    updatedForecastDataMap[option] = { xForecast, yForecast };
+
+                } catch (error) {
+                    showNotification('Error', error.message, 'danger');
+                    console.error(`Error occurred for ${option}:`, error);
+                }
+            }
+            setForecastDataMap(updatedForecastDataMap);
+        } catch (error) {
+            showNotification('Error', error.message, 'danger');
+            console.error('Error analyzing future trends:', error);
+        } finally {
+            setFutureTrendLoading(false);
+        }
+    };
 
     return (
         <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
@@ -546,7 +617,7 @@ const MetaMaskComponent = () => {
                                     flexDirection: 'column',
                                     gap: '10px'
                                 }}
-                            >
+                                >
                                 <div style={{
                                     display: 'flex',
                                     justifyContent: 'space-between',
@@ -603,7 +674,7 @@ const MetaMaskComponent = () => {
                                     </button>
 
 
-                                    <button disabled ={coinDetailsLoading}
+                                    <button disabled={coinDetailsLoading}
                                         onClick={() => {
                                             if (!showCoinDetails) {
                                                 handleCoinDetails(coin.id);
@@ -624,7 +695,7 @@ const MetaMaskComponent = () => {
                                     </button>
 
                                     <button
-                                        onClick={() => handleFutureTrends(coin.id)}
+                                        onClick={() => setDisplayFutureTrends(!displayFutureTrends)}
                                         style={{
                                             padding: '5px 10px',
                                             backgroundColor: '#28a745',
@@ -632,12 +703,84 @@ const MetaMaskComponent = () => {
                                             border: 'none',
                                             borderRadius: '5px',
                                             cursor: 'pointer',
-                                            flex: 1
+                                            flex: 1,
                                         }}
                                     >
-                                        Show Future Trends
+                                        {displayFutureTrends ? 'Hide Future Trends' : 'Show Future Trends'}
                                     </button>
                                 </div>
+
+                                {displayFutureTrends && (
+                                    <div>
+                                        {futureOptions.map((option) => (
+                                            <div key={option}>
+                                                <label>
+                                                    <input
+                                                        type="checkbox"
+                                                        value={option}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedOptions([...selectedOptions, option]);
+                                                            } else {
+                                                                setSelectedOptions(selectedOptions.filter((o) => o !== option));
+                                                            }
+                                                        }}
+                                                    />
+                                                    {option.replace('_', ' ')}
+                                                </label>
+                                            </div>
+                                        ))}
+
+                                        <button
+                                            onClick={() => handleFutureTrendOptions(selectedOptions, coin)}
+                                            style={{
+                                                padding: '5px 10px',
+                                                backgroundColor: '#28a745',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: '5px',
+                                                cursor: 'pointer',
+                                                flex: 1,
+                                                marginTop: '10px',
+                                            }}
+                                            disabled={selectedOptions.length === 0 || futureTrendLoading}
+                                        >
+                                            {futureTrendLoading ? 'Analyzing...' : 'Start Analysis (This might take some time)'}
+                                        </button>
+
+
+                                        <div>
+                                            <h2>Forecast</h2>
+                                            {console.log('Forecast Data Map:', forecastDataMap)}
+                                            {console.log('Number of forecast options:', Object.keys(forecastDataMap).length)}
+
+                                            {Object.keys(forecastDataMap).length === 0 ? (
+                                                <p>No forecast data available.</p>
+                                            ) : (
+                                                Object.keys(forecastDataMap).map((option) => {
+                                                  
+                                                    const { xForecast, yForecast } = forecastDataMap[option];
+
+                                                    const chartTitle = `${option} Forecast`;
+
+                                                    return (
+                                                        <ForecastChart
+                                                            key={option}
+                                                            xData={xForecast}
+                                                            yData={yForecast}
+                                                            chartTitle={chartTitle}
+                                                        />
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+
+
+
+                                    </div>
+                                )}
+
+
                                 {showDateInputs && (
                                     <div style={{ marginBottom: '20px' }}>
                                         <label>
@@ -675,6 +818,7 @@ const MetaMaskComponent = () => {
                                         </button>
                                     </div>
                                 )}
+
                                 {showHistoricalChart && (
                                     <div style={{ marginTop: '20px', width: '100%' }}>
                                         {marketPriceHistory ? (
@@ -684,7 +828,7 @@ const MetaMaskComponent = () => {
                                 )}
 
                                 {coinDetails && showCoinDetails && (
-                                    <div style={{width : '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
+                                    <div style={{ width: '100%', padding: '20px', border: '1px solid #ddd', borderRadius: '10px', margin: 'auto' }}>
                                         <h1><strong>Name:</strong>{coinDetails.name}</h1>
                                         <img
                                             src={coinDetails.image}
@@ -709,18 +853,6 @@ const MetaMaskComponent = () => {
                     </ul>
                 </div>
             </div>
-
-
-
-
-
-
-
-
-
-
-
-
 
 
         </div>

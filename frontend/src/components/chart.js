@@ -80,4 +80,60 @@ function PriceChart({ xData, yData, chartTitle }) {
     return <Line data={data} options={options} />;
 }
 
-export default PriceChart;
+const ForecastChart = ({ xData, yData, chartTitle }) => {
+    // Prepare data for the chart
+    const data = {
+      labels: xData,
+      datasets: [
+        {
+          label: chartTitle,
+          data: yData,
+          borderColor: 'rgba(75, 192, 192, 1)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          borderWidth: 1,
+          fill: true,
+        },
+      ],
+    };
+  
+    // Chart options
+    const options = {
+      responsive: true,
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+        },
+        tooltip: {
+          callbacks: {
+            label: (tooltipItem) => {
+              return `Value: ${tooltipItem.raw}`;
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: 'Date',
+          },
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Value',
+          },
+        },
+      },
+    };
+  
+    return (
+      <div style={{ margin: '20px' }}>
+        <h3>{chartTitle}</h3>
+        <Line data={data} options={options} />
+      </div>
+    );
+};
+
+export { ForecastChart, PriceChart };
